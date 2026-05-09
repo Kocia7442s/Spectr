@@ -92,6 +92,25 @@
   .pill.type-voip     { color: #c4b5fd;        border-color: #3a2a5a; background: #1a1430; }
   .pill.type-unknown  { color: var(--muted); }
   .flag-big { font-size: 22px; vertical-align: -3px; margin-right: 6px; }
+  .pivot-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid #2a4a6a;
+    border-radius: 999px;
+    margin: 2px 4px 2px 0;
+    font-size: 12px;
+    color: var(--accent-2);
+    background: #0f1c33;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+    user-select: none;
+  }
+  .pivot-tag:hover {
+    border-color: var(--accent);
+    background: #1a2e4a;
+    color: var(--accent);
+  }
+  .pivot-legend { font-size: 11px; color: var(--muted); margin-top: -8px; margin-bottom: 16px; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -106,7 +125,7 @@
 <body>
 <header>
   <h1>Spectr</h1>
-  <p>OSINT domain reconnaissance — DNS, WHOIS, subdomains, HTTP headers</p>
+  <p>OSINT · DNS · WHOIS · Subdomains · Headers · Shodan · GeoIP · Email · Username · Phone · Dorks · Gravatar · Pappers</p>
 </header>
 <main>
   <section class="section">
@@ -115,6 +134,7 @@
       <input id="domain" type="text" placeholder="e.g. example.com" autocomplete="off" required>
       <button type="submit" id="run-btn">Scan domain</button>
     </form>
+    <div class="pivot-legend">⟳ Tags cliquables = pivot automatique vers un autre module</div>
 
     <div class="grid">
       <section class="card" id="card-dns">
@@ -286,7 +306,16 @@ function renderWhois(data) {
   const st = p.status ? `<div class="meta" style="margin-top:8px">Status</div><div class="row">${p.status.map(s => `<span class="pill">${escapeHtml(s)}</span>`).join('')}</div>` : '';
   const chain = `<div class="meta" style="margin-top:8px">Servers queried: ${data.servers.map(s => escapeHtml(s.server)).join(' → ')}</div>`;
   const raw = `<details><summary>Raw response</summary><div class="inner"><pre>${escapeHtml(data.raw)}</pre></div></details>`;
-  return fieldsHtml + ns + st + chain + raw;
+
+  const pivotPills = [
+    p.registrant_org ? pivotBtn('pappers', p.registrant_org, 'Pappers: ' + p.registrant_org) : '',
+    p.registrar      ? pivotBtn('query',   p.registrar,      '🔍 Dorks: ' + p.registrar)      : '',
+  ].filter(Boolean).join('');
+  const pivots = pivotPills
+    ? `<div class="meta" style="margin-top:8px">Pivot</div><div class="row">${pivotPills}</div>`
+    : '';
+
+  return fieldsHtml + ns + st + pivots + chain + raw;
 }
 
 function renderSubdomains(data) {
@@ -469,6 +498,13 @@ function renderEmail(data) {
       }</div>`
     : '';
 
+  const pivots = `<div class="meta" style="margin-top:8px">Pivot</div><div class="row">${
+    pivotBtn('username', data.local,  'Username: ' + data.local) +
+    pivotBtn('query',    data.email,  '🔍 Dorks: ' + data.email) +
+    pivotBtn('gravatar', data.email,  'Gravatar') +
+    pivotBtn('domain',   data.domain, 'Scan domain: ' + data.domain)
+  }</div>`;
+
   const breachHtml = data.breaches.length
     ? `<div class="meta" style="margin-top:10px">Breaches (${data.breach_count})</div>` +
       data.breaches.map(b => {
@@ -500,7 +536,7 @@ function renderEmail(data) {
       }</tbody></table>`
     : '';
 
-  return banner + metaHtml + mxHtml + breachHtml + pasteHtml;
+  return banner + metaHtml + mxHtml + pivots + breachHtml + pasteHtml;
 }
 
 function renderUsername(data) {
@@ -524,7 +560,12 @@ function renderUsername(data) {
       }</table></div></details>`
     : '';
 
-  return summary + found + unknown + errors;
+  const pivots = `<div class="meta" style="margin-top:10px">Pivot</div><div class="row">${
+    pivotBtn('query', data.username, '🔍 Dorks: ' + data.username) +
+    pivotBtn('gravatar', data.username + '@gmail.com', 'Gravatar: ' + data.username + '@gmail.com')
+  }</div>`;
+
+  return summary + found + unknown + errors + pivots;
 }
 
 function renderDorks(data) {
@@ -590,10 +631,19 @@ function renderGravatar(data) {
         p.accounts.map(a => {
           const label = (a.shortname || a.domain || '?') + (a.username ? ' · ' + a.username : '');
           const cls = a.verified ? 'pill good' : 'pill';
-          return a.url
+          const link = a.url
             ? `<a class="platform-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"><span class="${cls}">${escapeHtml(label)} ↗</span></a>`
             : `<span class="${cls}">${escapeHtml(label)}</span>`;
+          const piv = a.username ? pivotBtn('username', a.username, (a.shortname || a.domain || 'username') + ': ' + a.username) : '';
+          return link + piv;
         }).join('')
+      }</div>`
+    : '';
+
+  const namePivots = (p.displayName || p.preferredUsername)
+    ? `<div class="meta" style="margin-top:10px">Pivot</div><div class="row">${
+        (p.displayName       ? pivotBtn('query',    p.displayName,       '🔍 Dorks: ' + p.displayName)       : '') +
+        (p.preferredUsername ? pivotBtn('username', p.preferredUsername, 'Username: ' + p.preferredUsername) : '')
       }</div>`
     : '';
 
@@ -622,7 +672,42 @@ function renderGravatar(data) {
       <tr><th>Avatar 400px</th><td><code>${escapeHtml(data.avatar_urls.large)}</code></td></tr>
     </table></div></details>`;
 
-  return banner + avatarHtml + metaHtml + accounts + urls + emails + footer;
+  return banner + avatarHtml + metaHtml + namePivots + accounts + urls + emails + footer;
+}
+
+const PIVOT_MAP = {
+  username: { inputId: 'username-input', formId: 'username-form' },
+  email:    { inputId: 'email-input',    formId: 'email-form' },
+  domain:   { inputId: 'domain',         formId: 'scan-form' },
+  query:    { inputId: 'dorks-input',    formId: 'dorks-form' },
+  phone:    { inputId: 'phone-input',    formId: 'phone-form' },
+  pappers:  { inputId: 'pappers-input',  formId: 'pappers-form' },
+  gravatar: { inputId: 'gravatar-input', formId: 'gravatar-form' },
+};
+
+function pivot(type, value) {
+  const target = PIVOT_MAP[type];
+  if (!target) return;
+  const input = document.getElementById(target.inputId);
+  const form  = document.getElementById(target.formId);
+  if (!input || !form) return;
+  input.value = value;
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  input.focus();
+  setTimeout(() => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })), 300);
+}
+
+// Delegated handler — avoids inline onclick (which would mis-escape values like L'Oréal).
+document.addEventListener('click', (e) => {
+  const tag = e.target.closest('.pivot-tag');
+  if (!tag) return;
+  pivot(tag.dataset.pivotType, tag.dataset.pivotValue);
+});
+
+function pivotBtn(type, value, label) {
+  if (value == null || value === '') return '';
+  const v = String(value);
+  return `<span class="pivot-tag" data-pivot-type="${escapeHtml(type)}" data-pivot-value="${escapeHtml(v)}" title="Pivot → ${escapeHtml(type)}: ${escapeHtml(v)}">⟳ ${escapeHtml(label || v)}</span>`;
 }
 
 function flagEmoji(cc) {
@@ -690,7 +775,14 @@ function renderPhone(data) {
        }</div>`
     : '';
 
-  return summaryHtml + nvHtml + searchHtml + socialHtml;
+  const pivots = `<div class="meta" style="margin-top:12px">Pivot</div><div class="row">${
+    pivotBtn('query', data.phone_e164, '🔍 Dorks: ' + data.phone_e164) +
+    (data.local_format && data.country_name
+      ? pivotBtn('query', data.local_format + ' ' + data.country_name, '🔍 Dorks: local + pays')
+      : '')
+  }</div>`;
+
+  return summaryHtml + nvHtml + pivots + searchHtml + socialHtml;
 }
 
 function renderPappers(data) {
@@ -735,10 +827,10 @@ function renderPappers(data) {
     }).join('')}</table>`;
 
     const dirHtml = (c.dirigeants || []).length
-      ? `<div class="meta" style="margin-top:8px">Dirigeants (${c.dirigeants.length})</div><div class="row">${
+      ? `<div class="meta" style="margin-top:8px">Dirigeants (${c.dirigeants.length}) — clic = pivot vers Dorks</div><div class="row">${
           c.dirigeants.map(d => {
-            const tip = [d.role, d.birth, d.nationality].filter(Boolean).join(' · ');
-            return `<span class="pill" title="${escapeHtml(tip)}">${escapeHtml(d.name)}${d.role ? ' · ' + escapeHtml(d.role) : ''}</span>`;
+            const label = d.name + (d.role ? ' · ' + d.role : '');
+            return pivotBtn('query', d.name, '🔍 ' + label);
           }).join('')
         }</div>`
       : '';
@@ -761,6 +853,11 @@ function renderPappers(data) {
         </div>`
       : '';
 
+    const pivotsRow = `<div class="meta" style="margin-top:8px">Pivot</div><div class="row">${
+      (c.siren          ? pivotBtn('pappers', c.siren,          'SIREN: ' + c.siren)          : '') +
+      (c.nom_entreprise ? pivotBtn('query',   c.nom_entreprise, '🔍 Dorks: ' + c.nom_entreprise) : '')
+    }</div>`;
+
     const title = [c.nom_entreprise, c.sigle ? '(' + c.sigle + ')' : null].filter(Boolean).map(escapeHtml).join(' ');
 
     return `<div class="ip-block">
@@ -769,6 +866,7 @@ function renderPappers(data) {
       ${dirHtml}
       ${extrasHtml}
       ${links}
+      ${pivotsRow}
     </div>`;
   }).join('');
 
