@@ -95,61 +95,73 @@
   <p>OSINT domain reconnaissance — DNS, WHOIS, subdomains, HTTP headers</p>
 </header>
 <main>
-  <form id="scan-form">
-    <input id="domain" type="text" placeholder="e.g. example.com" autocomplete="off" required>
-    <button type="submit" id="run-btn">Scan</button>
-  </form>
+  <section class="section">
+    <h2 class="section-title">Domain OSINT <span class="hint">DNS · WHOIS · subdomains · HTTP headers · Shodan · IP geolocation</span></h2>
+    <form id="scan-form">
+      <input id="domain" type="text" placeholder="e.g. example.com" autocomplete="off" required>
+      <button type="submit" id="run-btn">Scan domain</button>
+    </form>
 
-  <div class="grid">
-    <section class="card" id="card-dns">
-      <header><h2>DNS Records</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-whois">
-      <header><h2>WHOIS</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-subdomains">
-      <header><h2>Subdomains (crt.sh)</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-headers">
-      <header><h2>HTTP Headers</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-shodan">
-      <header><h2>Shodan</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-geoip">
-      <header><h2>IP Geolocation</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
-    </section>
-    <section class="card" id="card-email">
-      <header><h2>Email OSINT</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body">
-        <form class="in-card-form" id="email-form">
-          <input id="email-input" type="email" placeholder="user@example.com" autocomplete="off" required>
-          <button type="submit" id="email-btn">Check Email</button>
-        </form>
-        <div data-content><p class="empty">Enter an email and click Check Email.</p></div>
-      </div>
-    </section>
-    <section class="card" id="card-username">
-      <header><h2>Username Checker</h2><span class="badge loading" data-status>idle</span></header>
-      <div class="body">
-        <form class="in-card-form" id="username-form">
-          <input id="username-input" type="text" placeholder="pseudo" autocomplete="off" required pattern="[A-Za-z0-9._-]{3,30}">
-          <button type="submit" id="username-btn">Check Username</button>
-        </form>
-        <div data-content><p class="empty">Enter a username and click Check Username.</p></div>
-      </div>
-    </section>
-  </div>
+    <div class="grid">
+      <section class="card" id="card-dns">
+        <header><h2>DNS Records</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-whois">
+        <header><h2>WHOIS</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-subdomains">
+        <header><h2>Subdomains (crt.sh)</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-headers">
+        <header><h2>HTTP Headers</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-shodan">
+        <header><h2>Shodan</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-geoip">
+        <header><h2>IP Geolocation</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+    </div>
+  </section>
 
-  <section class="card" id="history">
-    <header><h2>Recent scans</h2><span class="badge loading" data-status>idle</span></header>
-    <div class="body" data-content><p class="empty">No history loaded yet.</p></div>
+  <section class="section">
+    <h2 class="section-title">Person OSINT <span class="hint">Each card runs independently — own input, own button</span></h2>
+    <div class="grid">
+      <section class="card" id="card-email">
+        <header><h2>Email OSINT</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="email-form">
+            <input id="email-input" type="email" placeholder="user@example.com" autocomplete="off" required>
+            <button type="submit" id="email-btn">Check email</button>
+          </form>
+          <div data-content><p class="empty">Enter an email and click Check email.</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-username">
+        <header><h2>Username Checker</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="username-form">
+            <input id="username-input" type="text" placeholder="pseudo" autocomplete="off" required pattern="[A-Za-z0-9._-]{3,30}">
+            <button type="submit" id="username-btn">Check username</button>
+          </form>
+          <div data-content><p class="empty">Enter a username and click Check username.</p></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Activity</h2>
+    <section class="card" id="history">
+      <header><h2>Recent scans</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">No history loaded yet.</p></div>
+    </section>
   </section>
 </main>
 
