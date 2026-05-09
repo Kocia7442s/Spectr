@@ -52,6 +52,10 @@
   .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; margin: 2px 4px 2px 0; font-size: 12px; color: var(--muted); }
   .pill.good { color: var(--good); border-color: #1f4736; }
   .pill.bad  { color: var(--bad);  border-color: #4a1a1a; }
+  .pill.cve  { color: #fff; background: #5c1414; border-color: #7a1d1d; font-weight: 600; }
+  .pill.port { color: var(--accent-2); border-color: #1f3357; }
+  .ip-block  { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #0e1422; }
+  .ip-block h3 { margin: 0 0 6px; font-size: 13px; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -89,6 +93,10 @@
     </section>
     <section class="card" id="card-headers">
       <header><h2>HTTP Headers</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+    <section class="card" id="card-shodan">
+      <header><h2>Shodan</h2><span class="badge loading" data-status>idle</span></header>
       <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
     </section>
   </div>
@@ -209,6 +217,72 @@ function renderHeaders(data) {
   return meta + tech + secTable + fullTable;
 }
 
+function renderShodan(data) {
+  const banner = data.rate_limited
+    ? `<div class="meta"><span class="pill bad">rate limited</span> Some IPs were skipped — see API errors below.</div>`
+    : '';
+  const summary = `<div class="meta">${data.ip_count} IP(s) · ${data.total_ports} open port(s) · ${data.total_vulns} CVE(s)</div>`;
+
+  if (!data.hosts.length) {
+    return summary + banner + `<p class="empty">No Shodan data returned.</p>`;
+  }
+
+  const blocks = data.hosts.map(h => {
+    if (h.not_found) {
+      return `<div class="ip-block"><h3><code>${escapeHtml(h.ip)}</code></h3>
+        <div class="meta">${escapeHtml(h.message)}</div></div>`;
+    }
+    const meta = [
+      ['Hostnames', (h.hostnames || []).join(', ')],
+      ['OS',        h.os],
+      ['Org',       h.org],
+      ['ISP',       h.isp],
+      ['ASN',       h.asn],
+      ['Location',  [h.city, h.country].filter(Boolean).join(', ')],
+      ['Country code', h.country_code],
+      ['Last scan', h.last_update],
+      ['Tags',      (h.tags || []).join(', ')],
+    ].filter(([_, v]) => v);
+    const metaHtml = `<table>${meta.map(([k,v]) => `<tr><th>${k}</th><td>${escapeHtml(v)}</td></tr>`).join('')}</table>`;
+
+    const portPills = (h.ports || []).map(p => {
+      const label = `${p.port}/${p.transport}` + (p.service ? ` · ${escapeHtml(p.service)}` : '') + (p.product ? ` (${escapeHtml(p.product)}${p.version ? ' ' + escapeHtml(p.version) : ''})` : '');
+      return `<span class="pill port" title="${escapeHtml(p.banner || '')}">${label}</span>`;
+    }).join('');
+    const portsHtml = portPills
+      ? `<div class="meta" style="margin-top:8px">Open ports (${h.port_count})</div><div class="row">${portPills}</div>`
+      : `<div class="meta" style="margin-top:8px">No open ports reported.</div>`;
+
+    const cvePills = (h.vulns || []).map(v => {
+      const label = v.cvss ? `${escapeHtml(v.cve)} · CVSS ${v.cvss}` : escapeHtml(v.cve);
+      return `<span class="pill cve" title="${escapeHtml(v.summary || '')}">${label}</span>`;
+    }).join('');
+    const cveHtml = cvePills
+      ? `<div class="meta" style="margin-top:8px">Vulnerabilities (${h.vuln_count})</div><div class="row">${cvePills}</div>`
+      : '';
+
+    const banners = (h.ports || []).filter(p => p.banner).map(p =>
+      `<details><summary>${p.port}/${p.transport} banner</summary><div class="inner"><pre>${escapeHtml(p.banner)}</pre></div></details>`
+    ).join('');
+
+    return `<div class="ip-block">
+      <h3><code>${escapeHtml(h.ip)}</code></h3>
+      ${metaHtml}
+      ${portsHtml}
+      ${cveHtml}
+      ${banners}
+    </div>`;
+  }).join('');
+
+  const errs = Object.keys(data.api_errors || {}).length
+    ? `<details><summary>API errors (${Object.keys(data.api_errors).length})</summary><div class="inner"><table>${
+        Object.entries(data.api_errors).map(([ip,e]) => `<tr><td><code>${escapeHtml(ip)}</code></td><td>${escapeHtml(e)}</td></tr>`).join('')
+      }</table></div></details>`
+    : '';
+
+  return summary + banner + blocks + errs;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -226,6 +300,7 @@ const MODULES = [
   { id: 'whois',      endpoint: 'whois.php',      render: renderWhois },
   { id: 'subdomains', endpoint: 'subdomains.php', render: renderSubdomains },
   { id: 'headers',    endpoint: 'headers.php',    render: renderHeaders },
+  { id: 'shodan',     endpoint: 'shodan.php',     render: renderShodan },
 ];
 
 async function runModule(domain, mod) {
