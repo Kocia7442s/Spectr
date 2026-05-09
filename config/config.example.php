@@ -19,4 +19,7 @@ return [
     // HaveIBeenPwned API key — purchase at https://haveibeenpwned.com/API (~$4/month).
     // Without a key, /api/email.php skips breach lookup and returns a warning.
     'hibp_api_key'   => getenv('SPECTR_HIBP_KEY') ?: '',
+    // numverify API key — register at https://numverify.com (free tier: 100 req/month).
+    // Without a key, /api/phone.php returns local parsing only.
+    'numverify_api_key' => getenv('SPECTR_NUMVERIFY_KEY') ?: '',
 ];

@@ -86,6 +86,12 @@
   .dork-btn { display: inline-block; padding: 4px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--accent-2); text-decoration: none; font-size: 12px; white-space: nowrap; }
   .dork-btn:hover { border-color: var(--accent-2); }
   .dork-btn.primary { background: #1f3357; color: #cfe2ff; }
+  .pill.type-mobile   { color: var(--good);    border-color: #1f4736; background: #0f2a20; }
+  .pill.type-landline { color: var(--accent-2); border-color: #1f3357; background: #0f1c33; }
+  .pill.type-special  { color: var(--warn);    border-color: #4a3a14; background: #2a210d; }
+  .pill.type-voip     { color: #c4b5fd;        border-color: #3a2a5a; background: #1a1430; }
+  .pill.type-unknown  { color: var(--muted); }
+  .flag-big { font-size: 22px; vertical-align: -3px; margin-right: 6px; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -179,6 +185,26 @@
             <button type="submit" id="gravatar-btn">Lookup</button>
           </form>
           <div data-content><p class="empty">Enter an email and click Lookup.</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-phone">
+        <header><h2>Phone OSINT</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="phone-form">
+            <input id="phone-input" type="tel" placeholder="+33 6 12 34 56 78" autocomplete="off" required>
+            <button type="submit" id="phone-btn">Lookup</button>
+          </form>
+          <div data-content><p class="empty">Enter a phone number in international format.</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-pappers">
+        <header><h2>Pappers (registre FR)</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="pappers-form">
+            <input id="pappers-input" type="text" placeholder="nom, entreprise, ou SIREN" autocomplete="off" required maxlength="100">
+            <button type="submit" id="pappers-btn">Rechercher</button>
+          </form>
+          <div data-content><p class="empty">Recherchez une personne, entreprise, ou un SIREN/SIRET.</p></div>
         </div>
       </section>
     </div>
@@ -599,6 +625,156 @@ function renderGravatar(data) {
   return banner + avatarHtml + metaHtml + accounts + urls + emails + footer;
 }
 
+function flagEmoji(cc) {
+  if (!cc || cc.length !== 2) return '';
+  const upper = cc.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(upper)) return '';
+  return String.fromCodePoint(...[...upper].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+function renderPhone(data) {
+  const flag = flagEmoji(data.country_code);
+  const typeClass = 'type-' + (data.type_hint || 'unknown').replace(/[^a-z]/gi, '-').toLowerCase();
+  const typeBadge = `<span class="pill ${typeClass}">${escapeHtml(data.type_hint || 'unknown')}</span>` +
+    (data.type_hint_confidence ? ` <span class="meta">(${escapeHtml(data.type_hint_confidence)} confidence)</span>` : '');
+
+  const summary = [
+    ['E.164',          `<code>${escapeHtml(data.phone_e164)}</code>`],
+    ['Country',        data.country_code
+                         ? `${flag ? `<span class="flag-big">${flag}</span>` : ''}${escapeHtml(data.country_name)} (${escapeHtml(data.country_code)}, ${escapeHtml(data.country_prefix || '')})`
+                         : '<span class="empty">unknown</span>'],
+    ['Local format',   data.local_format ? `<code>${escapeHtml(data.local_format)}</code>` : null],
+    ['Type hint',      typeBadge],
+  ].filter(([_, v]) => v != null && v !== '');
+  const summaryHtml = `<table>${summary.map(([k,v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
+
+  let nvHtml = '';
+  if (data.numverify) {
+    const nv = data.numverify;
+    const validBadge = nv.valid ? '<span class="pill good">valid</span>' : '<span class="pill bad">invalid</span>';
+    const rows = [
+      ['Valid',                validBadge],
+      ['International',        nv.international_format ? `<code>${escapeHtml(nv.international_format)}</code>` : null],
+      ['Local',                nv.local_format ? `<code>${escapeHtml(nv.local_format)}</code>` : null],
+      ['Country',              nv.country_name ? `${escapeHtml(nv.country_name)} (${escapeHtml(nv.country_code || '')})` : null],
+      ['Location',             nv.location],
+      ['Carrier',              nv.carrier],
+      ['Line type',            nv.line_type ? `<span class="pill">${escapeHtml(nv.line_type)}</span>` : null],
+    ].filter(([_, v]) => v != null && v !== '');
+    nvHtml = `<div class="meta" style="margin-top:12px">numverify</div>
+      <table>${rows.map(([k,v]) => {
+        const val = (typeof v === 'string' && (v.startsWith('<code>') || v.startsWith('<span'))) ? v : escapeHtml(String(v));
+        return `<tr><th>${k}</th><td>${val}</td></tr>`;
+      }).join('')}</table>`;
+  } else if (data.numverify_skipped) {
+    nvHtml = `<div class="meta" style="margin-top:12px"><span class="pill warn">numverify skipped</span> ${escapeHtml(data.numverify_warning || '')}</div>`;
+  }
+
+  const searchHtml = data.search_links.length
+    ? `<div class="meta" style="margin-top:12px">Search links</div>
+       <div class="row">${data.search_links.map(l =>
+         `<a class="dork-btn" href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.label)} ↗</a>`
+       ).join('')}</div>`
+    : '';
+
+  const socialHtml = data.social_links.length
+    ? `<div class="meta" style="margin-top:12px">Social platforms</div>
+       <div class="row">${data.social_links.map(l => {
+         if (l.url) {
+           return `<a class="platform-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(l.note || '')}"><span class="pill good">${escapeHtml(l.label)} ↗</span></a>`;
+         }
+         return `<span class="pill" title="${escapeHtml(l.note || '')}">${escapeHtml(l.label)}</span>`;
+       }).join('')}</div>
+       <div class="meta" style="margin-top:6px;font-size:11px">${
+         data.social_links.filter(l => l.note).map(l => `<div>· ${escapeHtml(l.label)}: ${escapeHtml(l.note)}</div>`).join('')
+       }</div>`
+    : '';
+
+  return summaryHtml + nvHtml + searchHtml + socialHtml;
+}
+
+function renderPappers(data) {
+  if (!data.companies.length) {
+    return `<div class="summary-banner warn">Aucun résultat sur le registre pour <code>${escapeHtml(data.query)}</code>.</div>
+      <div class="meta" style="margin-top:6px">Source: ${escapeHtml(data.source)}</div>`;
+  }
+
+  const inputBadge = `<span class="pill">${escapeHtml(data.input_type)}</span>`;
+  const summary = `<div class="meta">${data.returned} sur ${data.total_results} entreprise(s) · type: ${inputBadge} · source: ${escapeHtml(data.source)}</div>`;
+
+  const companyBlocks = data.companies.map(c => {
+    const statutPill = c.statut
+      ? `<span class="pill ${c.is_active ? 'good' : 'bad'}">${escapeHtml(c.statut)}</span>`
+      : '<span class="pill type-unknown">statut inconnu</span>';
+
+    const siege = c.siege || {};
+    const adresse = [siege.adresse, siege.code_postal, siege.commune].filter(Boolean).map(escapeHtml).join(', ');
+    const mapsLink = (siege.latitude != null && siege.longitude != null)
+      ? `<a href="https://maps.google.com/?q=${siege.latitude},${siege.longitude}" target="_blank" rel="noopener noreferrer">${siege.latitude}, ${siege.longitude} ↗</a>`
+      : null;
+
+    const effectif = [c.effectif_tranche, c.effectif_annee ? '(' + c.effectif_annee + ')' : null].filter(Boolean).join(' ');
+
+    const rows = [
+      ['SIREN',            c.siren ? `<code>${escapeHtml(c.siren)}</code>` : null],
+      ['SIRET siège',      c.siret_siege ? `<code>${escapeHtml(c.siret_siege)}</code>` : null],
+      ['Sigle',            c.sigle],
+      ['Forme juridique',  c.forme_juridique ? `<code>${escapeHtml(c.forme_juridique)}</code>` : null],
+      ['Activité (NAF)',   c.activite ? `<code>${escapeHtml(c.activite)}</code>` : null],
+      ['Statut',           statutPill],
+      ['Création',         c.date_creation],
+      ['Fermeture',        c.date_fermeture],
+      ['Effectif',         effectif || null],
+      ['Établissements',   c.nb_etablissements != null ? `${c.nb_etablissements} (${c.nb_etablissements_ouverts ?? '?'} ouverts)` : null],
+      ['Adresse',          adresse || null],
+      ['Coordonnées',      mapsLink],
+    ].filter(([_, v]) => v != null && v !== '');
+    const tableHtml = `<table>${rows.map(([k,v]) => {
+      const val = (typeof v === 'string' && (v.startsWith('<code>') || v.startsWith('<span') || v.startsWith('<a '))) ? v : escapeHtml(String(v));
+      return `<tr><th>${k}</th><td>${val}</td></tr>`;
+    }).join('')}</table>`;
+
+    const dirHtml = (c.dirigeants || []).length
+      ? `<div class="meta" style="margin-top:8px">Dirigeants (${c.dirigeants.length})</div><div class="row">${
+          c.dirigeants.map(d => {
+            const tip = [d.role, d.birth, d.nationality].filter(Boolean).join(' · ');
+            return `<span class="pill" title="${escapeHtml(tip)}">${escapeHtml(d.name)}${d.role ? ' · ' + escapeHtml(d.role) : ''}</span>`;
+          }).join('')
+        }</div>`
+      : '';
+
+    const extras = c.autres_etablissements || [];
+    const extrasHtml = extras.length
+      ? `<details style="margin-top:8px"><summary>Autres établissements (${extras.length})</summary><div class="inner"><table>${
+          extras.map(e => `<tr>
+            <td><code>${escapeHtml(e.siret || '')}</code></td>
+            <td>${escapeHtml([e.adresse, e.code_postal, e.commune].filter(Boolean).join(', '))}</td>
+            <td>${e.etat === 'A' ? '<span class="pill good">A</span>' : '<span class="pill bad">F</span>'}</td>
+          </tr>`).join('')
+        }</table></div></details>`
+      : '';
+
+    const links = c.links
+      ? `<div class="meta" style="margin-top:8px">
+          <a class="dork-btn" href="${escapeHtml(c.links.annuaire_entreprises)}" target="_blank" rel="noopener noreferrer">Annuaire-entreprises ↗</a>
+          <a class="dork-btn" href="${escapeHtml(c.links.societe_com)}" target="_blank" rel="noopener noreferrer">societe.com ↗</a>
+        </div>`
+      : '';
+
+    const title = [c.nom_entreprise, c.sigle ? '(' + c.sigle + ')' : null].filter(Boolean).map(escapeHtml).join(' ');
+
+    return `<div class="ip-block">
+      <h3>${title || '<em class="empty">Sans nom</em>'}</h3>
+      ${tableHtml}
+      ${dirHtml}
+      ${extrasHtml}
+      ${links}
+    </div>`;
+  }).join('');
+
+  return summary + companyBlocks;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -702,6 +878,20 @@ document.getElementById('gravatar-form').addEventListener('submit', (e) => {
   const email = document.getElementById('gravatar-input').value.trim();
   if (!email) return;
   runStandalone('card-gravatar', 'gravatar.php', 'email=' + encodeURIComponent(email), renderGravatar, document.getElementById('gravatar-btn'));
+});
+
+document.getElementById('phone-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const phone = document.getElementById('phone-input').value.trim();
+  if (!phone) return;
+  runStandalone('card-phone', 'phone.php', 'phone=' + encodeURIComponent(phone), renderPhone, document.getElementById('phone-btn'));
+});
+
+document.getElementById('pappers-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = document.getElementById('pappers-input').value.trim();
+  if (!q) return;
+  runStandalone('card-pappers', 'pappers.php', 'q=' + encodeURIComponent(q), renderPappers, document.getElementById('pappers-btn'));
 });
 
 refreshHistory();
