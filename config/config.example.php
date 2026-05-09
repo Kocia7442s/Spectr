@@ -16,4 +16,7 @@ return [
     ],
     // Get one at https://account.shodan.io — free tier is rate-limited.
     'shodan_api_key' => getenv('SPECTR_SHODAN_KEY') ?: '',
+    // HaveIBeenPwned API key — purchase at https://haveibeenpwned.com/API (~$4/month).
+    // Without a key, /api/email.php skips breach lookup and returns a warning.
+    'hibp_api_key'   => getenv('SPECTR_HIBP_KEY') ?: '',
 ];

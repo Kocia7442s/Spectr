@@ -56,6 +56,21 @@
   .pill.port { color: var(--accent-2); border-color: #1f3357; }
   .ip-block  { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #0e1422; }
   .ip-block h3 { margin: 0 0 6px; font-size: 13px; }
+  .in-card-form { display: flex; gap: 8px; margin-bottom: 10px; }
+  .in-card-form input { flex: 1; padding: 8px 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; }
+  .in-card-form input:focus { border-color: var(--accent-2); }
+  .in-card-form button { padding: 8px 14px; font-size: 13px; }
+  .pill.warn { color: var(--warn); border-color: #4a3a14; }
+  a.platform-link { color: inherit; text-decoration: none; }
+  a.platform-link:hover { text-decoration: underline; }
+  .breach-block { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; background: #170d0d; }
+  .breach-block.fab { background: #1a1408; }
+  .breach-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .breach-head strong { font-size: 13px; }
+  .summary-banner { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; }
+  .summary-banner.bad  { background: #3b1212; color: var(--bad); }
+  .summary-banner.good { background: #0f3a2a; color: var(--good); }
+  .summary-banner.warn { background: #3a2a0f; color: var(--warn); }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -102,6 +117,26 @@
     <section class="card" id="card-geoip">
       <header><h2>IP Geolocation</h2><span class="badge loading" data-status>idle</span></header>
       <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+    <section class="card" id="card-email">
+      <header><h2>Email OSINT</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body">
+        <form class="in-card-form" id="email-form">
+          <input id="email-input" type="email" placeholder="user@example.com" autocomplete="off" required>
+          <button type="submit" id="email-btn">Check Email</button>
+        </form>
+        <div data-content><p class="empty">Enter an email and click Check Email.</p></div>
+      </div>
+    </section>
+    <section class="card" id="card-username">
+      <header><h2>Username Checker</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body">
+        <form class="in-card-form" id="username-form">
+          <input id="username-input" type="text" placeholder="pseudo" autocomplete="off" required pattern="[A-Za-z0-9._-]{3,30}">
+          <button type="submit" id="username-btn">Check Username</button>
+        </form>
+        <div data-content><p class="empty">Enter a username and click Check Username.</p></div>
+      </div>
     </section>
   </div>
 
@@ -336,6 +371,89 @@ function renderGeoip(data) {
   return summary + blocks + errs;
 }
 
+function renderEmail(data) {
+  let banner;
+  if (data.hibp_skipped) {
+    banner = `<div class="summary-banner warn">${escapeHtml(data.hibp_warning || 'HIBP lookup skipped.')}</div>`;
+  } else if (data.is_compromised) {
+    banner = `<div class="summary-banner bad">⚠ Compromised — ${data.breach_count} breach(es) · ${data.paste_count} paste(s)</div>`;
+  } else {
+    banner = `<div class="summary-banner good">✓ No breaches or pastes found for this address.</div>`;
+  }
+
+  const meta = [
+    ['Email',         `<code>${escapeHtml(data.email)}</code>`],
+    ['Local part',    `<code>${escapeHtml(data.local)}</code>`],
+    ['Domain',        `<code>${escapeHtml(data.domain)}</code>`],
+    ['Provider',      data.provider ? `${escapeHtml(data.provider)}${data.is_free_provider ? ' <span class="pill">free</span>' : ''}` : '<span class="empty">unknown</span>'],
+    ['Has MX',        data.has_mx ? '<span class="pill good">yes</span>' : '<span class="pill bad">no</span>'],
+  ];
+  const metaHtml = `<table>${meta.map(([k,v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
+
+  const mxHtml = data.mx_records.length
+    ? `<div class="meta" style="margin-top:8px">MX records</div><div class="row">${
+        data.mx_records.map(m => `<span class="pill">${m.pri ?? '?'} · ${escapeHtml(m.target)}</span>`).join('')
+      }</div>`
+    : '';
+
+  const breachHtml = data.breaches.length
+    ? `<div class="meta" style="margin-top:10px">Breaches (${data.breach_count})</div>` +
+      data.breaches.map(b => {
+        const tags = [];
+        if (b.is_verified === false)  tags.push('<span class="pill warn">unverified</span>');
+        if (b.is_fabricated)          tags.push('<span class="pill warn">fabricated</span>');
+        if (b.is_sensitive)           tags.push('<span class="pill bad">sensitive</span>');
+        const dataClasses = (b.data_classes || []).map(d => `<span class="pill bad">${escapeHtml(d)}</span>`).join('');
+        const pwn = b.pwn_count ? Number(b.pwn_count).toLocaleString() : '?';
+        return `<details class="breach-block${b.is_fabricated ? ' fab' : ''}">
+          <summary>
+            <div class="breach-head">
+              <strong>${escapeHtml(b.title || b.name)}</strong>
+              <span class="meta">${escapeHtml(b.date || '')} · ${pwn} accounts ${tags.join(' ')}</span>
+            </div>
+          </summary>
+          <div style="margin-top:8px">
+            ${dataClasses ? `<div class="meta">Data exposed</div><div class="row">${dataClasses}</div>` : ''}
+            ${b.description ? `<div class="meta" style="margin-top:6px">Description</div><pre>${escapeHtml(b.description)}</pre>` : ''}
+          </div>
+        </details>`;
+      }).join('')
+    : (!data.hibp_skipped ? `<div class="meta" style="margin-top:10px">No breaches.</div>` : '');
+
+  const pasteHtml = data.pastes.length
+    ? `<div class="meta" style="margin-top:10px">Pastes (${data.paste_count})</div>` +
+      `<table><thead><tr><th>Source</th><th>Title</th><th>Date</th><th>Emails</th></tr></thead><tbody>${
+        data.pastes.map(p => `<tr><td>${escapeHtml(p.source || '')}</td><td>${escapeHtml(p.title || '')}</td><td>${escapeHtml(p.date || '')}</td><td>${p.email_count ?? '?'}</td></tr>`).join('')
+      }</tbody></table>`
+    : '';
+
+  return banner + metaHtml + mxHtml + breachHtml + pasteHtml;
+}
+
+function renderUsername(data) {
+  const summary = `<div class="meta">Found ${data.found_count}/${data.total_checked} platforms · ${data.duration_ms}ms · ${data.unknown_count} unknown · ${data.not_found_count} not found · ${data.error_count} errors</div>`;
+
+  const found = data.found.length
+    ? `<div class="meta" style="margin-top:8px">Found</div><div class="row">${
+        data.found.map(f => `<a class="platform-link" href="${escapeHtml(f.url)}" target="_blank" rel="noopener noreferrer"><span class="pill good">${escapeHtml(f.platform)} ↗</span></a>`).join('')
+      }</div>`
+    : '';
+
+  const unknown = data.unknown.length
+    ? `<div class="meta" style="margin-top:8px">Unknown (HEAD blocked, captcha, or rate-limited)</div><div class="row">${
+        data.unknown.map(u => `<a class="platform-link" href="${escapeHtml(u.url)}" target="_blank" rel="noopener noreferrer"><span class="pill">${escapeHtml(u.platform)} · HTTP ${u.http_code} ↗</span></a>`).join('')
+      }</div>`
+    : '';
+
+  const errors = data.errors.length
+    ? `<details style="margin-top:8px"><summary>Errors (${data.error_count})</summary><div class="inner"><table>${
+        data.errors.map(e => `<tr><td>${escapeHtml(e.platform)}</td><td>${escapeHtml(e.error || ('HTTP ' + e.http_code))}</td></tr>`).join('')
+      }</table></div></details>`
+    : '';
+
+  return summary + found + unknown + errors;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -393,6 +511,38 @@ document.getElementById('scan-form').addEventListener('submit', async (e) => {
   await Promise.all(MODULES.map(m => runModule(domain, m)));
   await refreshHistory();
   btn.disabled = false;
+});
+
+async function runStandalone(cardId, endpoint, query, render, btn) {
+  const card = document.getElementById(cardId);
+  setStatus(card, 'loading', 'loading…');
+  setBody(card, `<p class="empty">Querying ${endpoint}…</p>`);
+  if (btn) btn.disabled = true;
+  try {
+    const data = await fetchJSON(`${API}/${endpoint}?${query}`);
+    setStatus(card, 'ok', 'ok');
+    setBody(card, render(data));
+  } catch (e) {
+    setStatus(card, 'err', 'error');
+    setBody(card, `<p class="empty">${escapeHtml(e.message)}</p>`);
+  } finally {
+    if (btn) btn.disabled = false;
+    refreshHistory();
+  }
+}
+
+document.getElementById('email-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('email-input').value.trim();
+  if (!email) return;
+  runStandalone('card-email', 'email.php', 'email=' + encodeURIComponent(email), renderEmail, document.getElementById('email-btn'));
+});
+
+document.getElementById('username-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const username = document.getElementById('username-input').value.trim();
+  if (!username) return;
+  runStandalone('card-username', 'username.php', 'username=' + encodeURIComponent(username), renderUsername, document.getElementById('username-btn'));
 });
 
 refreshHistory();

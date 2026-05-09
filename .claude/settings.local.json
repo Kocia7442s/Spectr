@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l api/username.php)",
+      "Bash(timeout 30 php -r '$_GET[\"username\"]=\"torvalds\"; $_SERVER[\"REQUEST_METHOD\"]=\"GET\"; require \"api/username.php\";')"
+    ]
+  }
+}
