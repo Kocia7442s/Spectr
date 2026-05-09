@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spectr — OSINT Domain Recon</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2233;
+    --border: #243049;
+    --text: #e7ecf5;
+    --muted: #8a96ac;
+    --accent: #6ee7b7;
+    --accent-2: #60a5fa;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --good: #34d399;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system,Segoe UI,Roboto,Inter,sans-serif; }
+  header { padding: 24px 28px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg,#0f1626,#0b0f17); }
+  header h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .5px; }
+  header p { margin: 0; color: var(--muted); }
+  main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+  form { display: flex; gap: 10px; margin-bottom: 24px; }
+  input[type=text] {
+    flex: 1; padding: 12px 14px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; font-size: 15px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent-2); }
+  button {
+    padding: 12px 20px; background: var(--accent); color: #062018; border: 0; font-weight: 600;
+    border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .card header { background: var(--panel-2); padding: 12px 16px; border: 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .card header h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .card .body { padding: 14px 16px; max-height: 460px; overflow: auto; }
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+  .badge.loading { background: #1d2a3f; color: var(--muted); }
+  .badge.ok      { background: #0f3a2a; color: var(--good); }
+  .badge.err     { background: #3b1212; color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0; color: #c9d4e6; }
+  .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; margin: 2px 4px 2px 0; font-size: 12px; color: var(--muted); }
+  .pill.good { color: var(--good); border-color: #1f4736; }
+  .pill.bad  { color: var(--bad);  border-color: #4a1a1a; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .empty { color: var(--muted); font-style: italic; }
+  details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
+  details summary { cursor: pointer; padding: 8px 10px; color: var(--muted); }
+  details[open] summary { border-bottom: 1px solid var(--border); }
+  details .inner { padding: 10px; max-height: 240px; overflow: auto; }
+  #history { margin-top: 24px; }
+  #history th, #history td { font-size: 12px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Spectr</h1>
+  <p>OSINT domain reconnaissance — DNS, WHOIS, subdomains, HTTP headers</p>
+</header>
+<main>
+  <form id="scan-form">
+    <input id="domain" type="text" placeholder="e.g. example.com" autocomplete="off" required>
+    <button type="submit" id="run-btn">Scan</button>
+  </form>
+
+  <div class="grid">
+    <section class="card" id="card-dns">
+      <header><h2>DNS Records</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+    <section class="card" id="card-whois">
+      <header><h2>WHOIS</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+    <section class="card" id="card-subdomains">
+      <header><h2>Subdomains (crt.sh)</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+    <section class="card" id="card-headers">
+      <header><h2>HTTP Headers</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
+  </div>
+
+  <section class="card" id="history">
+    <header><h2>Recent scans</h2><span class="badge loading" data-status>idle</span></header>
+    <div class="body" data-content><p class="empty">No history loaded yet.</p></div>
+  </section>
+</main>
+
+<script>
+const API = '../api';
+
+const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+
+function setStatus(card, state, text) {
+  const el = card.querySelector('[data-status]');
+  el.className = 'badge ' + state;
+  el.textContent = text;
+}
+function setBody(card, html) {
+  card.querySelector('[data-content]').innerHTML = html;
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  let json = null;
+  try { json = await res.json(); } catch (_) {}
+  if (!json) throw new Error('HTTP ' + res.status + ' — non-JSON response');
+  if (!json.success) throw new Error(json.error || 'Request failed');
+  return json.data;
+}
+
+function renderDNS(data) {
+  const types = ['A','AAAA','MX','TXT','NS','CNAME','SOA'];
+  const sections = types.map(t => {
+    const rows = data.records[t] || [];
+    if (!rows.length) return `<tr><td colspan="2" class="empty">${t}: —</td></tr>`;
+    return rows.map(r => {
+      let val = '';
+      if (t === 'A')     val = r.ip;
+      else if (t === 'AAAA') val = r.ipv6;
+      else if (t === 'MX')   val = `${escapeHtml(r.target)} (pri ${r.pri})`;
+      else if (t === 'TXT')  val = escapeHtml(r.txt);
+      else if (t === 'SOA')  val = `mname=${escapeHtml(r.mname)} rname=${escapeHtml(r.rname)} serial=${r.serial}`;
+      else                   val = escapeHtml(r.target);
+      return `<tr><td><code>${t}</code></td><td><code>${val}</code></td></tr>`;
+    }).join('');
+  }).join('');
+  return `
+    <div class="meta">${data.total} records</div>
+    <table><thead><tr><th>Type</th><th>Value</th></tr></thead><tbody>${sections}</tbody></table>`;
+}
+
+function renderWhois(data) {
+  const p = data.parsed || {};
+  const fields = [
+    ['Registrar', p.registrar],
+    ['Registrar URL', p.registrar_url],
+    ['Created', p.creation_date],
+    ['Updated', p.updated_date],
+    ['Expires', p.expiry_date],
+    ['Registrant Org', p.registrant_org],
+    ['Registrant Country', p.registrant_country],
+    ['DNSSEC', p.dnssec],
+  ].filter(([_, v]) => v);
+
+  const fieldsHtml = fields.length
+    ? `<table>${fields.map(([k,v]) => `<tr><th>${k}</th><td>${escapeHtml(v)}</td></tr>`).join('')}</table>`
+    : `<p class="empty">No structured fields parsed.</p>`;
+
+  const ns = p.name_servers ? `<div class="meta" style="margin-top:8px">Name servers</div><div class="row">${p.name_servers.map(s => `<span class="pill">${escapeHtml(s)}</span>`).join('')}</div>` : '';
+  const st = p.status ? `<div class="meta" style="margin-top:8px">Status</div><div class="row">${p.status.map(s => `<span class="pill">${escapeHtml(s)}</span>`).join('')}</div>` : '';
+  const chain = `<div class="meta" style="margin-top:8px">Servers queried: ${data.servers.map(s => escapeHtml(s.server)).join(' → ')}</div>`;
+  const raw = `<details><summary>Raw response</summary><div class="inner"><pre>${escapeHtml(data.raw)}</pre></div></details>`;
+  return fieldsHtml + ns + st + chain + raw;
+}
+
+function renderSubdomains(data) {
+  if (!data.count) return `<p class="empty">No subdomains returned by crt.sh.</p>`;
+  const list = data.subdomains.map(s => `<span class="pill">${escapeHtml(s)}</span>`).join('');
+  const wc = data.wildcards.length
+    ? `<div class="meta" style="margin-top:10px">Wildcards (${data.wildcards.length})</div><div class="row">${data.wildcards.map(s => `<span class="pill">${escapeHtml(s)}</span>`).join('')}</div>`
+    : '';
+  const depth = Object.entries(data.depth_breakdown).map(([d,c]) => `${c}×depth ${d}`).join(' · ');
+  return `
+    <div class="meta">${data.count} unique subdomains · ${depth} · ${data.raw_entries} raw cert entries</div>
+    <div class="row">${list}</div>
+    ${wc}`;
+}
+
+function renderHeaders(data) {
+  const r = data.request;
+  const meta = `<div class="meta">${escapeHtml(r.status)} · ${r.http_code} · ${r.redirects} redirect(s) · ${r.total_time}s · final: <code>${escapeHtml(r.final_url)}</code></div>`;
+
+  const tech = data.technologies.length
+    ? `<div class="meta" style="margin-top:6px">Technologies</div><div class="row">${data.technologies.map(t => `<span class="pill">${escapeHtml(t)}</span>`).join('')}</div>`
+    : '';
+
+  const sec = data.security;
+  const secRows = sec.checks.map(c => `
+    <tr>
+      <td>${escapeHtml(c.label)}</td>
+      <td>${c.present ? '<span class="pill good">present</span>' : '<span class="pill bad">missing</span>'}</td>
+      <td><code>${c.present ? escapeHtml(c.value) : escapeHtml(c.recommendation)}</code></td>
+    </tr>`).join('');
+  const secTable = `
+    <div class="meta" style="margin-top:10px">Security headers — score ${sec.score}/${sec.max}</div>
+    <table><thead><tr><th>Header</th><th>State</th><th>Value / recommendation</th></tr></thead><tbody>${secRows}</tbody></table>`;
+
+  const allHeaders = Object.entries(data.headers)
+    .map(([k,v]) => `<tr><td><code>${escapeHtml(k)}</code></td><td><code>${escapeHtml(v)}</code></td></tr>`).join('');
+  const fullTable = `<details><summary>All response headers (${Object.keys(data.headers).length})</summary>
+    <div class="inner"><table>${allHeaders}</table></div></details>`;
+
+  return meta + tech + secTable + fullTable;
+}
+
+function renderHistory(data) {
+  if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
+  const rows = data.scans.map(s => `
+    <tr>
+      <td>${new Date(s.created_at).toLocaleString()}</td>
+      <td><code>${escapeHtml(s.domain)}</code></td>
+      <td>${escapeHtml(s.module)}</td>
+      <td>${s.success ? '<span class="pill good">ok</span>' : '<span class="pill bad">err</span>'}</td>
+    </tr>`).join('');
+  return `<table><thead><tr><th>When</th><th>Domain</th><th>Module</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+const MODULES = [
+  { id: 'dns',        endpoint: 'dns.php',        render: renderDNS },
+  { id: 'whois',      endpoint: 'whois.php',      render: renderWhois },
+  { id: 'subdomains', endpoint: 'subdomains.php', render: renderSubdomains },
+  { id: 'headers',    endpoint: 'headers.php',    render: renderHeaders },
+];
+
+async function runModule(domain, mod) {
+  const card = document.getElementById('card-' + mod.id);
+  setStatus(card, 'loading', 'loading…');
+  setBody(card, `<p class="empty">Querying ${mod.endpoint}…</p>`);
+  try {
+    const data = await fetchJSON(`${API}/${mod.endpoint}?domain=${encodeURIComponent(domain)}`);
+    setStatus(card, 'ok', 'ok');
+    setBody(card, mod.render(data));
+  } catch (e) {
+    setStatus(card, 'err', 'error');
+    setBody(card, `<p class="empty">${escapeHtml(e.message)}</p>`);
+  }
+}
+
+async function refreshHistory() {
+  const card = document.getElementById('history');
+  setStatus(card, 'loading', 'loading…');
+  try {
+    const data = await fetchJSON(`${API}/history.php?limit=25`);
+    setStatus(card, 'ok', `${data.scans.length} entries`);
+    setBody(card, renderHistory(data));
+  } catch (e) {
+    setStatus(card, 'err', 'error');
+    setBody(card, `<p class="empty">${escapeHtml(e.message)}</p>`);
+  }
+}
+
+document.getElementById('scan-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const domain = document.getElementById('domain').value.trim();
+  if (!domain) return;
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  await Promise.all(MODULES.map(m => runModule(domain, m)));
+  await refreshHistory();
+  btn.disabled = false;
+});
+
+refreshHistory();
+</script>
+</body>
+</html>
