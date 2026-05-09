@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spectr — OSINT Domain Recon</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
   :root {
     --bg: #0b0f17;
@@ -135,6 +136,48 @@
   .wayback-status-3xx { color: var(--accent-2); border-color: #1f3357; }
   .wayback-status-404 { color: var(--bad); border-color: #4a1a1a; }
   .wayback-status-other { color: var(--muted); }
+  .gh-profile { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  .gh-avatar { width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0; }
+  .gh-info { flex: 1; min-width: 0; }
+  .gh-info h3 { margin: 0 0 4px; font-size: 14px; }
+  .gh-info .bio { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .score-block { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+  .score-block .score-num { font-size: 32px; font-weight: 700; line-height: 1; }
+  .score-block .score-label { font-size: 13px; font-weight: 600; }
+  .score-block .score-detail { color: var(--muted); font-size: 12px; }
+  .score-excellent { background: #0f2a20; color: var(--good); border: 1px solid #1f4736; }
+  .score-good      { background: #0f1c33; color: var(--accent-2); border: 1px solid #1f3357; }
+  .score-medium    { background: #2a210d; color: var(--warn); border: 1px solid #4a3a14; }
+  .score-poor      { background: #2a1010; color: var(--bad); border: 1px solid #4a1a1a; }
+  .check-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .check-row:last-child { border-bottom: 0; }
+  .check-row .name { font-weight: 600; min-width: 90px; font-size: 12px; }
+  .check-row .info { flex: 1; font-size: 12px; color: var(--muted); }
+  /* Graph */
+  #card-graph header h2 { margin: 0; }
+  #graph-container svg { width: 100%; height: 480px; display: block; cursor: grab; background: #0a0d14; }
+  #graph-container svg:active { cursor: grabbing; }
+  #graph-container .gnode-circle { stroke: #0b0f17; stroke-width: 1.5; cursor: pointer; }
+  #graph-container .gnode-circle:hover { stroke: #fff; stroke-width: 2; }
+  #graph-container .gnode-label { font-size: 10px; fill: #fff; pointer-events: none; text-anchor: middle; font-family: -apple-system, Segoe UI, Roboto, sans-serif; user-select: none; }
+  #graph-container .glink { stroke: #2a3650; stroke-width: 1; stroke-opacity: 0.7; }
+  #graph-container .glabel { font-size: 9px; fill: #5d6a82; pointer-events: none; text-anchor: middle; user-select: none; }
+  .graph-tooltip {
+    position: absolute; pointer-events: auto; min-width: 180px; max-width: 280px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    display: none; z-index: 10;
+  }
+  .graph-tooltip.visible { display: block; }
+  .graph-tooltip .tt-type { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+  .graph-tooltip .tt-id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; margin-bottom: 6px; color: var(--text); }
+  .graph-tooltip .tt-action { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .graph-tooltip .tt-close { position: absolute; top: 6px; right: 8px; cursor: pointer; color: var(--muted); border: 0; background: transparent; font-size: 14px; }
+  .graph-legend { display: flex; flex-wrap: wrap; gap: 10px 14px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 11px; }
+  .graph-legend .lg-item { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .graph-legend .lg-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #graph-clear-btn:hover { border-color: var(--bad) !important; }
+  #graph-empty { display: flex; align-items: center; justify-content: center; height: 480px; color: var(--muted); font-size: 13px; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -189,6 +232,16 @@
       <section class="card" id="card-geoip">
         <header><h2>IP Geolocation</h2><span class="badge loading" data-status>idle</span></header>
         <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+      </section>
+      <section class="card" id="card-mailsec">
+        <header><h2>Mail Security (SPF/DKIM/DMARC)</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="mailsec-form">
+            <input id="mailsec-input" type="text" placeholder="example.com or user@example.com" autocomplete="off" required>
+            <button type="submit" id="mailsec-btn">Audit</button>
+          </form>
+          <div data-content><p class="empty">Audite SPF, DKIM, DMARC, MTA-STS et BIMI.</p></div>
+        </div>
       </section>
     </div>
   </section>
@@ -284,6 +337,40 @@
           <div data-content><p class="empty">Entrez un domaine ou une URL.</p></div>
         </div>
       </section>
+      <section class="card" id="card-github">
+        <header><h2>GitHub Deep Scan</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="github-form">
+            <input id="github-input" type="text" placeholder="github username" autocomplete="off" required pattern="[A-Za-z0-9._-]{3,30}">
+            <button type="submit" id="github-btn">Deep scan</button>
+          </form>
+          <div data-content><p class="empty">Profile + repos + commit emails + orgs.</p></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="section" id="section-graph">
+    <h2 class="section-title">Graphe de relations <span class="hint">Se peuple automatiquement au fil des scans</span></h2>
+    <div class="card" id="card-graph">
+      <header>
+        <h2>Relations</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="graph-node-count" class="meta">0 nœuds</span>
+          <button type="button" id="graph-clear-btn" style="padding:4px 10px;font-size:12px;background:var(--panel-2);color:var(--bad);border:1px solid var(--border);border-radius:6px;cursor:pointer">Effacer</button>
+        </div>
+      </header>
+      <div id="graph-container">
+        <div id="graph-empty">Lancez un scan pour commencer à peupler le graphe.</div>
+        <div class="graph-tooltip" id="graph-tooltip">
+          <button type="button" class="tt-close" aria-label="Fermer">×</button>
+          <div class="tt-type"></div>
+          <div class="tt-id"></div>
+          <div class="tt-data meta"></div>
+          <div class="tt-action">Double-clic = pivoter vers le module concerné</div>
+        </div>
+      </div>
+      <div class="graph-legend" id="graph-legend"></div>
     </div>
   </section>
 
@@ -740,6 +827,7 @@ const PIVOT_MAP = {
   phone:    { inputId: 'phone-input',    formId: 'phone-form' },
   pappers:  { inputId: 'pappers-input',  formId: 'pappers-form' },
   gravatar: { inputId: 'gravatar-input', formId: 'gravatar-form' },
+  wayback:  { inputId: 'wayback-input',  formId: 'wayback-form' },
 };
 
 function pivot(type, value) {
@@ -1056,6 +1144,192 @@ function renderWayback(data) {
   return closestHtml + tableHtml + linksRow + pivotRow;
 }
 
+function renderGithub(data) {
+  const p = data.profile;
+  if (!p) return `<p class="empty">Profile not found.</p>`;
+
+  const profileBlock = `<div class="gh-profile">
+    ${p.avatar_url ? `<img class="gh-avatar" src="${escapeHtml(p.avatar_url)}" alt="" loading="lazy">` : ''}
+    <div class="gh-info">
+      <h3>${escapeHtml(p.name || p.login)} <span class="meta">· @<a href="${escapeHtml(p.html_url || ('https://github.com/' + p.login))}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.login)}</a></span></h3>
+      ${p.bio ? `<div class="bio">${escapeHtml(p.bio)}</div>` : ''}
+    </div>
+  </div>`;
+
+  const metaRows = [
+    ['Company',   p.company],
+    ['Location',  p.location],
+    ['Email',     p.email ? `<code>${escapeHtml(p.email)}</code>` : null],
+    ['Blog',      p.blog ? `<a href="${escapeHtml(p.blog)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.blog)} ↗</a>` : null],
+    ['Twitter',   p.twitter_username ? `<a href="https://x.com/${escapeHtml(p.twitter_username)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(p.twitter_username)} ↗</a>` : null],
+    ['Hireable',  p.hireable === true ? '<span class="pill good">yes</span>' : (p.hireable === false ? '<span class="pill">no</span>' : null)],
+    ['Created',   p.created_at],
+    ['Updated',   p.updated_at],
+  ].filter(([_, v]) => v != null && v !== '');
+  const metaHtml = metaRows.length
+    ? `<table>${metaRows.map(([k, v]) => {
+        const val = (typeof v === 'string' && (v.startsWith('<code>') || v.startsWith('<a ') || v.startsWith('<span'))) ? v : escapeHtml(String(v));
+        return `<tr><th>${k}</th><td>${val}</td></tr>`;
+      }).join('')}</table>`
+    : '';
+
+  const stats = `<div class="meta" style="margin-top:8px">Stats</div><div class="row">
+    <span class="pill">${p.public_repos} repos</span>
+    <span class="pill">${p.followers} followers</span>
+    <span class="pill">${p.following} following</span>
+    <span class="pill">${p.public_gists} gists</span>
+    ${data.rate_limit_remaining != null ? `<span class="pill">API ${data.rate_limit_remaining}/60</span>` : ''}
+  </div>`;
+
+  const langEntries = Object.entries(data.languages || {});
+  const langHtml = langEntries.length
+    ? `<div class="meta" style="margin-top:8px">Languages</div><div class="row">${
+        langEntries.map(([lang, count]) => `<span class="pill">${escapeHtml(lang)} · ${count}</span>`).join('')
+      }</div>`
+    : '';
+
+  const orgsHtml = (data.orgs || []).length
+    ? `<div class="meta" style="margin-top:8px">Organizations (${data.orgs.length})</div><div class="row">${
+        data.orgs.map(o => `<a class="platform-link" href="${escapeHtml(o.html_url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(o.description || '')}"><span class="pill">${escapeHtml(o.login)} ↗</span></a>`).join('')
+      }</div>`
+    : '';
+
+  const emailsHtml = (data.commit_emails || []).length
+    ? `<div class="meta" style="margin-top:10px">Commit emails (${data.commit_email_count}) — extracted from recent commits</div>` +
+      data.commit_emails.map(e => {
+        const tag = e.is_noreply ? '<span class="pill warn" title="GitHub privacy email">noreply</span>' : '';
+        const namePivot  = e.name ? pivotBtn('query', e.name, '🔍 ' + e.name) : '';
+        const emailPivot = !e.is_noreply ? pivotBtn('email', e.email, e.email) : '';
+        return `<div style="margin:4px 0">
+          <code>${escapeHtml(e.email)}</code> ${e.name ? '— ' + escapeHtml(e.name) : ''} ${tag}
+          <span style="margin-left:8px">${emailPivot}${namePivot}</span>
+        </div>`;
+      }).join('') +
+      (data.commits_rate_limited ? `<div class="meta"><span class="pill warn">rate limited</span> Some repos skipped.</div>` : '')
+    : (data.commits_rate_limited ? `<div class="meta"><span class="pill warn">rate limited</span> Commit-email mining could not run.</div>` : '');
+
+  const repos = (data.repos || []).slice(0, 10);
+  const reposHtml = repos.length
+    ? `<details style="margin-top:10px"><summary>Top repos (${repos.length} of ${data.repo_count_returned})</summary><div class="inner"><table><thead><tr><th>Repo</th><th>Lang</th><th>★</th><th>Updated</th></tr></thead><tbody>${
+        repos.map(r => `<tr>
+          <td><a href="${escapeHtml(r.html_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.name)} ↗</a>${r.archived ? ' <span class="pill">archived</span>' : ''}${r.fork ? ' <span class="pill">fork</span>' : ''}<div class="meta">${escapeHtml(r.description || '')}</div></td>
+          <td>${escapeHtml(r.language || '-')}</td>
+          <td>${r.stargazers_count}</td>
+          <td>${escapeHtml((r.updated_at || '').slice(0, 10))}</td>
+        </tr>`).join('')
+      }</tbody></table></div></details>`
+    : '';
+
+  const pivots = `<div class="meta" style="margin-top:10px">Pivot</div><div class="row">${
+    pivotBtn('username', p.login, 'Username: ' + p.login) +
+    pivotBtn('query', p.name || p.login, '🔍 Dorks: ' + (p.name || p.login)) +
+    (p.email ? pivotBtn('email', p.email, p.email) : '') +
+    (p.blog ? (() => { try { return pivotBtn('domain', new URL(p.blog).hostname, 'Scan blog domain'); } catch (_) { return ''; } })() : '')
+  }</div>`;
+
+  return profileBlock + metaHtml + stats + langHtml + orgsHtml + emailsHtml + reposHtml + pivots;
+}
+
+function renderMailsec(data) {
+  const score = data.score;
+  const cls = score >= 80 ? 'score-excellent'
+            : (score >= 60 ? 'score-good'
+            : (score >= 40 ? 'score-medium' : 'score-poor'));
+  const scoreBlock = `<div class="score-block ${cls}">
+    <div class="score-num">${score}</div>
+    <div>
+      <div class="score-label">${escapeHtml(data.score_label)}</div>
+      <div class="score-detail">Score email security · ${escapeHtml(data.domain)}</div>
+    </div>
+  </div>`;
+
+  // SPF
+  const spf = data.spf;
+  const spfRiskMap = {
+    strict:   ['good', '-all (strict)'],
+    soft:     ['good', '~all (soft)'],
+    neutral:  ['warn', '?all (neutral)'],
+    critical: ['bad',  '+all — anyone can send as you'],
+    no_all:   ['warn', 'no all qualifier'],
+    missing:  ['bad',  'no SPF record'],
+  };
+  const [spfPillCls, spfDesc] = spfRiskMap[spf.risk] || ['', spf.risk];
+  const spfRow = `<div class="check-row">
+    <div class="name">SPF</div>
+    <div class="info">${spf.present ? `${spf.mechanisms.length} mécanisme(s)` : 'absent'}</div>
+    ${spf.present ? `<span class="pill good">present</span>` : `<span class="pill bad">missing</span>`}
+    <span class="pill ${spfPillCls}">${escapeHtml(spfDesc)}</span>
+  </div>`;
+
+  // DKIM
+  const dkim = data.dkim;
+  const dkimSelectors = (dkim.selectors_found || []).map(s =>
+    `<span class="pill good" title="${escapeHtml(s.host)} · key length ${s.p_length}">${escapeHtml(s.selector)}</span>`
+  ).join('');
+  const dkimRow = `<div class="check-row">
+    <div class="name">DKIM</div>
+    <div class="info">${dkim.selectors_found.length}/${dkim.selectors_checked.length} sélecteurs courants testés</div>
+    ${dkim.selectors_found.length
+      ? `<div class="row" style="margin:0">${dkimSelectors}</div>`
+      : `<span class="pill bad">aucun trouvé</span>`}
+  </div>`;
+
+  // DMARC
+  const dmarc = data.dmarc;
+  const dmarcStrengthMap = {
+    strong:  ['good', 'p=reject'],
+    medium:  ['warn', 'p=quarantine'],
+    weak:    ['bad',  'p=none (mode rapport)'],
+    none:    ['bad',  'absent'],
+    unknown: ['',     dmarc.policy || '?'],
+  };
+  const [dmCls, dmDesc] = dmarcStrengthMap[dmarc.strength] || ['', dmarc.strength];
+  const dmarcRow = `<div class="check-row">
+    <div class="name">DMARC</div>
+    <div class="info">${dmarc.present
+      ? `pct=${dmarc.pct ?? '?'} · sp=${escapeHtml(dmarc.subdomain_policy || 'inherits')}`
+      : 'absent'}</div>
+    ${dmarc.present ? `<span class="pill good">present</span>` : `<span class="pill bad">missing</span>`}
+    <span class="pill ${dmCls}">${escapeHtml(dmDesc)}</span>
+  </div>`;
+
+  // MTA-STS / BIMI
+  const presencePill = ok => ok ? `<span class="pill good">present</span>` : `<span class="pill">absent</span>`;
+  const mtaRow = `<div class="check-row"><div class="name">MTA-STS</div><div class="info">Strict Transport Security policy</div>${presencePill(data.mta_sts.present)}</div>`;
+  const bimiRow = `<div class="check-row"><div class="name">BIMI</div><div class="info">Brand Indicators for Message Identification</div>${presencePill(data.bimi.present)}</div>`;
+
+  // Reporting (rua) callout
+  const reportingHtml = (dmarc.rua || dmarc.ruf)
+    ? `<div class="meta" style="margin-top:8px">DMARC reporting</div><table>
+        ${dmarc.rua ? `<tr><th>rua</th><td><code>${escapeHtml(dmarc.rua)}</code></td></tr>` : ''}
+        ${dmarc.ruf ? `<tr><th>ruf</th><td><code>${escapeHtml(dmarc.ruf)}</code></td></tr>` : ''}
+      </table>`
+    : '';
+
+  // Raw
+  const rawSections = [
+    spf.record   ? ['SPF',   spf.record]   : null,
+    dmarc.record ? ['DMARC', dmarc.record] : null,
+    ...(dkim.selectors_found || []).map(s => [`DKIM ${s.selector}`, s.record_truncated]),
+  ].filter(Boolean);
+  const rawHtml = rawSections.length
+    ? `<details style="margin-top:10px"><summary>Raw records (${rawSections.length})</summary><div class="inner">
+        ${rawSections.map(([n, v]) => `<div class="meta">${escapeHtml(n)}</div><pre>${escapeHtml(v)}</pre>`).join('')}
+      </div></details>`
+    : '';
+
+  const pivots = `<div class="meta" style="margin-top:10px">Pivot</div><div class="row">${
+    pivotBtn('domain',  data.domain,                 'Scan domain: ' + data.domain) +
+    pivotBtn('wayback', 'https://' + data.domain,    'Wayback: ' + data.domain)
+  }</div>`;
+
+  return scoreBlock +
+    `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 12px;background:var(--panel-2)">
+      ${spfRow}${dkimRow}${dmarcRow}${mtaRow}${bimiRow}
+    </div>` +
+    reportingHtml + rawHtml + pivots;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -1077,6 +1351,372 @@ const MODULES = [
   { id: 'geoip',      endpoint: 'geoip.php',      render: renderGeoip },
 ];
 
+// =====================================================================
+// Graph: D3 force-directed visualization that auto-builds from scan data
+// =====================================================================
+
+const GRAPH_TYPES = {
+  domain:    { color: '#6ee7b7', label: 'Domain' },
+  ip:        { color: '#60a5fa', label: 'IP' },
+  email:     { color: '#f87171', label: 'Email' },
+  username:  { color: '#c4b5fd', label: 'Username' },
+  phone:     { color: '#fbbf24', label: 'Phone' },
+  company:   { color: '#34d399', label: 'Company' },
+  person:    { color: '#fb923c', label: 'Person' },
+  subdomain: { color: '#8a96ac', label: 'Subdomain' },
+  server:    { color: '#67e8f9', label: 'Server' },
+};
+
+const graphData = { nodes: [], edges: [] };
+const graphIndex = new Map();              // id → node ref
+const graphEdgeIndex = new Set();          // "src→tgt|label" dedupe key
+
+let graphSim = null;
+let graphLink = null;
+let graphLinkLabel = null;
+let graphNode = null;
+let graphSvg = null;
+let graphZoomLayer = null;
+
+function graphTruncate(s, n) {
+  s = String(s ?? '');
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+function graphNodeKey(type, id) { return type + ':' + id; }
+
+function graphAddNode(type, id, label, data) {
+  if (!type || id === undefined || id === null || id === '') return null;
+  if (!GRAPH_TYPES[type]) return null;
+  const key = graphNodeKey(type, id);
+  let node = graphIndex.get(key);
+  if (node) {
+    if (data) node.data = Object.assign({}, node.data || {}, data);
+    if (label && !node.label) node.label = label;
+    return node;
+  }
+  node = { id: key, key, type, raw: id, label: label || id, data: data || {} };
+  graphIndex.set(key, node);
+  graphData.nodes.push(node);
+  return node;
+}
+
+function graphAddEdge(srcKey, tgtKey, label) {
+  if (!srcKey || !tgtKey || srcKey === tgtKey) return;
+  const eKey = srcKey + '→' + tgtKey + '|' + (label || '');
+  if (graphEdgeIndex.has(eKey)) return;
+  graphEdgeIndex.add(eKey);
+  graphData.edges.push({ source: srcKey, target: tgtKey, label: label || '' });
+}
+
+function graphInit() {
+  const container = document.getElementById('graph-container');
+  if (!container || typeof d3 === 'undefined') return;
+
+  const empty = document.getElementById('graph-empty');
+  if (empty) empty.style.display = 'none';
+
+  if (graphSvg) return; // already initialized
+
+  graphSvg = d3.select(container).append('svg').attr('preserveAspectRatio', 'xMidYMid meet');
+  graphZoomLayer = graphSvg.append('g').attr('class', 'zoom-layer');
+  graphSvg.append('defs').append('marker')
+    .attr('id', 'graph-arrow').attr('viewBox', '0 -5 10 10')
+    .attr('refX', 26).attr('refY', 0).attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#2a3650');
+
+  const linkGroup     = graphZoomLayer.append('g').attr('class', 'links');
+  const linkLabelGroup = graphZoomLayer.append('g').attr('class', 'link-labels');
+  const nodeGroup     = graphZoomLayer.append('g').attr('class', 'nodes');
+
+  graphSvg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', (e) => {
+    graphZoomLayer.attr('transform', e.transform);
+  }));
+
+  // Close-graph tooltip on outside click.
+  graphSvg.on('click', () => graphTooltipHide());
+  document.querySelector('#graph-tooltip .tt-close')?.addEventListener('click', graphTooltipHide);
+
+  graphSim = d3.forceSimulation()
+    .force('link',   d3.forceLink().id(d => d.key).distance(70).strength(0.6))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(container.clientWidth / 2, 240))
+    .force('collide', d3.forceCollide().radius(30))
+    .on('tick', graphTick);
+
+  graphLink      = linkGroup.selectAll('line');
+  graphLinkLabel = linkLabelGroup.selectAll('text');
+  graphNode      = nodeGroup.selectAll('g.gnode');
+
+  // Auto-resize.
+  const ro = new ResizeObserver(() => {
+    if (!graphSvg) return;
+    const w = container.clientWidth || 800;
+    graphSvg.attr('viewBox', `0 0 ${w} 480`);
+    graphSim.force('center', d3.forceCenter(w / 2, 240));
+    graphSim.alpha(0.3).restart();
+  });
+  ro.observe(container);
+}
+
+function graphTick() {
+  if (graphLink)      graphLink.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  if (graphLinkLabel) graphLinkLabel.attr('x', d => (d.source.x + d.target.x) / 2).attr('y', d => (d.source.y + d.target.y) / 2);
+  if (graphNode)      graphNode.attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+function graphRender() {
+  graphInit();
+  if (!graphSim) return;
+
+  document.getElementById('graph-node-count').textContent = `${graphData.nodes.length} nœuds · ${graphData.edges.length} liens`;
+  if (!graphData.nodes.length) {
+    document.getElementById('graph-empty').style.display = 'flex';
+    return;
+  } else {
+    document.getElementById('graph-empty').style.display = 'none';
+  }
+
+  graphLink = graphLink.data(graphData.edges, d => d.source + '→' + d.target + '|' + d.label).join('line').attr('class', 'glink').attr('marker-end', 'url(#graph-arrow)');
+  graphLinkLabel = graphLinkLabel.data(graphData.edges, d => d.source + '→' + d.target + '|' + d.label).join('text').attr('class', 'glabel').text(d => d.label || '');
+
+  graphNode = graphNode.data(graphData.nodes, d => d.key).join(enter => {
+    const g = enter.append('g').attr('class', 'gnode').call(graphDrag());
+    g.append('circle').attr('class', 'gnode-circle').attr('r', 18).attr('fill', d => GRAPH_TYPES[d.type].color);
+    g.append('text').attr('class', 'gnode-label').attr('dy', '0.35em').text(d => graphTruncate(d.label, 12));
+    g.on('click', (ev, d) => { ev.stopPropagation(); graphTooltipShow(ev, d); });
+    g.on('dblclick', (ev, d) => { ev.stopPropagation(); graphPivotFromNode(d); });
+    g.append('title').text(d => `${GRAPH_TYPES[d.type].label}: ${d.raw}`);
+    return g;
+  });
+
+  graphSim.nodes(graphData.nodes);
+  graphSim.force('link').links(graphData.edges);
+  graphSim.alpha(0.7).restart();
+}
+
+function graphDrag() {
+  return d3.drag()
+    .on('start', (ev, d) => { if (!ev.active) graphSim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+    .on('end',   (ev, d) => { if (!ev.active) graphSim.alphaTarget(0); d.fx = null; d.fy = null; });
+}
+
+function graphTooltipShow(ev, d) {
+  const tt = document.getElementById('graph-tooltip');
+  if (!tt) return;
+  tt.querySelector('.tt-type').textContent = GRAPH_TYPES[d.type].label;
+  tt.querySelector('.tt-id').textContent = d.raw;
+  const dataParts = Object.entries(d.data || {}).slice(0, 6).map(([k, v]) =>
+    typeof v === 'object' ? `${k}: ${JSON.stringify(v)}` : `${k}: ${v}`
+  );
+  tt.querySelector('.tt-data').innerHTML = dataParts.length ? dataParts.map(s => `<div>${escapeHtml(s)}</div>`).join('') : '';
+  // Position relative to graph-container.
+  const cont = document.getElementById('graph-container').getBoundingClientRect();
+  tt.style.left = Math.min(cont.width - 290, Math.max(8, ev.clientX - cont.left + 12)) + 'px';
+  tt.style.top  = Math.max(8, ev.clientY - cont.top + 12) + 'px';
+  tt.classList.add('visible');
+}
+function graphTooltipHide() { document.getElementById('graph-tooltip')?.classList.remove('visible'); }
+
+function graphPivotFromNode(d) {
+  switch (d.type) {
+    case 'domain':    return pivot('domain',   d.raw);
+    case 'subdomain': return pivot('domain',   d.raw);
+    case 'email':     return pivot('email',    d.raw);
+    case 'username':  return pivot('username', d.raw);
+    case 'phone':     return pivot('phone',    d.raw);
+    case 'company':   return pivot('pappers',  d.raw);
+    case 'ip':        // no direct pivot — feed dorks
+    case 'server':
+    case 'person':
+    default:          return pivot('query',    d.raw);
+  }
+}
+
+function graphLegend() {
+  const lg = document.getElementById('graph-legend');
+  if (!lg) return;
+  lg.innerHTML = Object.entries(GRAPH_TYPES).map(([k, v]) =>
+    `<span class="lg-item"><span class="lg-dot" style="background:${v.color}"></span>${v.label}</span>`
+  ).join('');
+}
+
+function graphClear() {
+  graphData.nodes.length = 0;
+  graphData.edges.length = 0;
+  graphIndex.clear();
+  graphEdgeIndex.clear();
+  graphRender();
+  graphTooltipHide();
+}
+
+document.getElementById('graph-clear-btn')?.addEventListener('click', graphClear);
+graphLegend();
+
+// ---- Per-module population rules ----
+function graphAddFromScan(moduleId, data, primary) {
+  if (!data) return;
+  switch (moduleId) {
+    case 'dns': {
+      const domain = primary || data.records?.A?.[0]?.host || data.records?.NS?.[0]?.host;
+      if (!domain) break;
+      const dn = graphAddNode('domain', domain);
+      for (const r of (data.records?.A || []))     { graphAddNode('ip', r.ip);     graphAddEdge(dn.key, graphNodeKey('ip', r.ip), 'A'); }
+      for (const r of (data.records?.MX || []))    if (r.target) { graphAddNode('server', r.target);    graphAddEdge(dn.key, graphNodeKey('server', r.target), 'MX'); }
+      for (const r of (data.records?.NS || []))    if (r.target) { graphAddNode('server', r.target);    graphAddEdge(dn.key, graphNodeKey('server', r.target), 'NS'); }
+      break;
+    }
+    case 'whois': {
+      if (!primary) break;
+      const dn = graphAddNode('domain', primary);
+      const org = data.parsed?.registrant_org;
+      if (org) { graphAddNode('company', org); graphAddEdge(dn.key, graphNodeKey('company', org), 'registrant'); }
+      const reg = data.parsed?.registrar;
+      if (reg) { graphAddNode('company', reg); graphAddEdge(dn.key, graphNodeKey('company', reg), 'registrar'); }
+      break;
+    }
+    case 'subdomains': {
+      const domain = primary;
+      if (!domain) break;
+      const dn = graphAddNode('domain', domain);
+      const subs = (data.subdomains || []).slice(0, 15);
+      for (const s of subs) { graphAddNode('subdomain', s); graphAddEdge(dn.key, graphNodeKey('subdomain', s), 'sub'); }
+      break;
+    }
+    case 'headers': {
+      if (!primary) break;
+      const dn = graphAddNode('domain', primary);
+      for (const t of (data.technologies || []).slice(0, 6)) {
+        graphAddNode('server', t);
+        graphAddEdge(dn.key, graphNodeKey('server', t), 'tech');
+      }
+      break;
+    }
+    case 'geoip': {
+      for (const h of (data.hosts || [])) {
+        if (!h.ip) continue;
+        const loc = [h.city, h.country].filter(Boolean).join(', ');
+        graphAddNode('ip', h.ip, h.ip + (loc ? ' · ' + loc : ''), { country: h.country, city: h.city, asn: h.asn, org: h.org_name });
+      }
+      break;
+    }
+    case 'shodan': {
+      for (const h of (data.hosts || [])) {
+        if (!h.ip) continue;
+        graphAddNode('ip', h.ip, h.ip, { ports: h.port_count, vulns: h.vuln_count, org: h.org });
+      }
+      break;
+    }
+    case 'mailsec': {
+      const dom = data.domain || primary;
+      if (dom) graphAddNode('domain', dom, dom, { score: data.score, mailsec: data.score_label });
+      break;
+    }
+    case 'wayback': {
+      const u = data.url || primary; if (!u) break;
+      try {
+        const host = new URL(u).hostname;
+        graphAddNode('domain', host, host, { wayback: data.snapshot_count });
+      } catch (_) {}
+      break;
+    }
+    case 'email': {
+      const e = data.email; if (!e) break;
+      graphAddNode('email', e);
+      if (data.domain) { graphAddNode('domain', data.domain); graphAddEdge(graphNodeKey('email', e), graphNodeKey('domain', data.domain), 'mx'); }
+      if (data.local)  { graphAddNode('username', data.local); graphAddEdge(graphNodeKey('email', e), graphNodeKey('username', data.local), 'local'); }
+      for (const b of (data.breaches || []).slice(0, 5)) {
+        graphAddNode('server', b.title || b.name, b.title || b.name, { date: b.date, pwn: b.pwn_count });
+        graphAddEdge(graphNodeKey('email', e), graphNodeKey('server', b.title || b.name), 'breach');
+      }
+      break;
+    }
+    case 'username': {
+      const u = data.username; if (!u) break;
+      const un = graphAddNode('username', u);
+      for (const f of (data.found || []).slice(0, 12)) {
+        graphAddNode('server', f.platform);
+        graphAddEdge(un.key, graphNodeKey('server', f.platform), 'has account');
+      }
+      break;
+    }
+    case 'gravatar': {
+      if (!data.has_account) break;
+      const e = data.email;
+      if (e) graphAddNode('email', e);
+      const dn = data.profile?.displayName;
+      const un = data.profile?.preferredUsername;
+      if (dn) {
+        graphAddNode('person', dn, dn, { username: un });
+        if (e) graphAddEdge(graphNodeKey('email', e), graphNodeKey('person', dn), 'gravatar');
+      }
+      if (un) {
+        graphAddNode('username', un);
+        if (dn) graphAddEdge(graphNodeKey('person', dn), graphNodeKey('username', un), 'username');
+        else if (e) graphAddEdge(graphNodeKey('email', e), graphNodeKey('username', un), 'username');
+      }
+      for (const a of (data.profile?.accounts || []).slice(0, 8)) {
+        if (!a.username) continue;
+        graphAddNode('username', a.username, a.username + (a.shortname ? ' · ' + a.shortname : ''));
+        if (dn) graphAddEdge(graphNodeKey('person', dn), graphNodeKey('username', a.username), a.shortname || 'account');
+      }
+      break;
+    }
+    case 'pappers': {
+      for (const c of (data.companies || []).slice(0, 3)) {
+        if (!c.nom_entreprise) continue;
+        const cn = graphAddNode('company', c.nom_entreprise, c.nom_entreprise, { siren: c.siren, statut: c.statut });
+        for (const d of (c.dirigeants || []).slice(0, 6)) {
+          graphAddNode('person', d.name, d.name, { role: d.role });
+          graphAddEdge(cn.key, graphNodeKey('person', d.name), d.role || 'dirigeant');
+        }
+      }
+      break;
+    }
+    case 'github': {
+      const login = data.profile?.login || primary; if (!login) break;
+      const un = graphAddNode('username', login, login, { platform: 'GitHub' });
+      if (data.profile?.email) {
+        graphAddNode('email', data.profile.email);
+        graphAddEdge(un.key, graphNodeKey('email', data.profile.email), 'profile email');
+      }
+      if (data.profile?.name) {
+        graphAddNode('person', data.profile.name, data.profile.name, { github: login });
+        graphAddEdge(un.key, graphNodeKey('person', data.profile.name), 'identity');
+      }
+      for (const o of (data.orgs || []).slice(0, 6)) {
+        if (!o.login) continue;
+        graphAddNode('company', o.login, o.login, { github_org: true });
+        graphAddEdge(un.key, graphNodeKey('company', o.login), 'member');
+      }
+      for (const e of (data.commit_emails || []).slice(0, 8)) {
+        if (e.is_noreply) continue;
+        graphAddNode('email', e.email, e.email, { source: 'commits', name: e.name });
+        graphAddEdge(un.key, graphNodeKey('email', e.email), 'commit');
+      }
+      break;
+    }
+    case 'phone': {
+      const p = data.phone_e164 || primary; if (!p) break;
+      graphAddNode('phone', p, p, { country: data.country_name, type: data.type_hint });
+      break;
+    }
+    case 'exif': {
+      if (data.gps) {
+        const id = data.basic?.file_name || 'image';
+        graphAddNode('person', id, id, { gps: data.gps.latitude + ', ' + data.gps.longitude, camera: data.camera?.Model });
+      }
+      break;
+    }
+    case 'dorks': {
+      // Dorks are pure search URLs, not facts — skip.
+      return;
+    }
+  }
+  graphRender();
+}
+
 async function runModule(domain, mod) {
   const card = document.getElementById('card-' + mod.id);
   setStatus(card, 'loading', 'loading…');
@@ -1085,6 +1725,7 @@ async function runModule(domain, mod) {
     const data = await fetchJSON(`${API}/${mod.endpoint}?domain=${encodeURIComponent(domain)}`);
     setStatus(card, 'ok', 'ok');
     setBody(card, mod.render(data));
+    try { graphAddFromScan(mod.id, data, domain); } catch (_) {}
   } catch (e) {
     setStatus(card, 'err', 'error');
     setBody(card, `<p class="empty">${escapeHtml(e.message)}</p>`);
@@ -1115,7 +1756,7 @@ document.getElementById('scan-form').addEventListener('submit', async (e) => {
   btn.disabled = false;
 });
 
-async function runStandalone(cardId, endpoint, query, render, btn) {
+async function runStandalone(cardId, endpoint, query, render, btn, primary) {
   const card = document.getElementById(cardId);
   setStatus(card, 'loading', 'loading…');
   setBody(card, `<p class="empty">Querying ${endpoint}…</p>`);
@@ -1124,6 +1765,7 @@ async function runStandalone(cardId, endpoint, query, render, btn) {
     const data = await fetchJSON(`${API}/${endpoint}?${query}`);
     setStatus(card, 'ok', 'ok');
     setBody(card, render(data));
+    try { graphAddFromScan(cardId.replace(/^card-/, ''), data, primary); } catch (_) {}
   } catch (e) {
     setStatus(card, 'err', 'error');
     setBody(card, `<p class="empty">${escapeHtml(e.message)}</p>`);
@@ -1137,42 +1779,42 @@ document.getElementById('email-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const email = document.getElementById('email-input').value.trim();
   if (!email) return;
-  runStandalone('card-email', 'email.php', 'email=' + encodeURIComponent(email), renderEmail, document.getElementById('email-btn'));
+  runStandalone('card-email', 'email.php', 'email=' + encodeURIComponent(email), renderEmail, document.getElementById('email-btn'), email);
 });
 
 document.getElementById('username-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const username = document.getElementById('username-input').value.trim();
   if (!username) return;
-  runStandalone('card-username', 'username.php', 'username=' + encodeURIComponent(username), renderUsername, document.getElementById('username-btn'));
+  runStandalone('card-username', 'username.php', 'username=' + encodeURIComponent(username), renderUsername, document.getElementById('username-btn'), username);
 });
 
 document.getElementById('dorks-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('dorks-input').value.trim();
   if (!q) return;
-  runStandalone('card-dorks', 'dorks.php', 'query=' + encodeURIComponent(q), renderDorks, document.getElementById('dorks-btn'));
+  runStandalone('card-dorks', 'dorks.php', 'query=' + encodeURIComponent(q), renderDorks, document.getElementById('dorks-btn'), q);
 });
 
 document.getElementById('gravatar-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const email = document.getElementById('gravatar-input').value.trim();
   if (!email) return;
-  runStandalone('card-gravatar', 'gravatar.php', 'email=' + encodeURIComponent(email), renderGravatar, document.getElementById('gravatar-btn'));
+  runStandalone('card-gravatar', 'gravatar.php', 'email=' + encodeURIComponent(email), renderGravatar, document.getElementById('gravatar-btn'), email);
 });
 
 document.getElementById('phone-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const phone = document.getElementById('phone-input').value.trim();
   if (!phone) return;
-  runStandalone('card-phone', 'phone.php', 'phone=' + encodeURIComponent(phone), renderPhone, document.getElementById('phone-btn'));
+  runStandalone('card-phone', 'phone.php', 'phone=' + encodeURIComponent(phone), renderPhone, document.getElementById('phone-btn'), phone);
 });
 
 document.getElementById('pappers-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('pappers-input').value.trim();
   if (!q) return;
-  runStandalone('card-pappers', 'pappers.php', 'q=' + encodeURIComponent(q), renderPappers, document.getElementById('pappers-btn'));
+  runStandalone('card-pappers', 'pappers.php', 'q=' + encodeURIComponent(q), renderPappers, document.getElementById('pappers-btn'), q);
 });
 
 document.getElementById('exif-form').addEventListener('submit', async (e) => {
@@ -1199,6 +1841,7 @@ document.getElementById('exif-form').addEventListener('submit', async (e) => {
     if (!json.success) throw new Error(json.error || 'Erreur');
     setStatus(card, 'ok', 'ok');
     setBody(card, renderExif(json.data));
+    try { graphAddFromScan('exif', json.data); } catch (_) {}
   } catch (err) {
     setStatus(card, 'err', 'error');
     setBody(card, `<p class="empty">${escapeHtml(err.message)}</p>`);
@@ -1212,7 +1855,21 @@ document.getElementById('wayback-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const u = document.getElementById('wayback-input').value.trim();
   if (!u) return;
-  runStandalone('card-wayback', 'wayback.php', 'url=' + encodeURIComponent(u), renderWayback, document.getElementById('wayback-btn'));
+  runStandalone('card-wayback', 'wayback.php', 'url=' + encodeURIComponent(u), renderWayback, document.getElementById('wayback-btn'), u);
+});
+
+document.getElementById('github-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const u = document.getElementById('github-input').value.trim();
+  if (!u) return;
+  runStandalone('card-github', 'github.php', 'username=' + encodeURIComponent(u), renderGithub, document.getElementById('github-btn'), u);
+});
+
+document.getElementById('mailsec-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const d = document.getElementById('mailsec-input').value.trim();
+  if (!d) return;
+  runStandalone('card-mailsec', 'mailsec.php', 'domain=' + encodeURIComponent(d), renderMailsec, document.getElementById('mailsec-btn'), d);
 });
 
 function exportPDF() {
