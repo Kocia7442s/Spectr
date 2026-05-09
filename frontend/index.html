@@ -99,6 +99,10 @@
       <header><h2>Shodan</h2><span class="badge loading" data-status>idle</span></header>
       <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
     </section>
+    <section class="card" id="card-geoip">
+      <header><h2>IP Geolocation</h2><span class="badge loading" data-status>idle</span></header>
+      <div class="body" data-content><p class="empty">Run a scan to populate.</p></div>
+    </section>
   </div>
 
   <section class="card" id="history">
@@ -283,6 +287,55 @@ function renderShodan(data) {
   return summary + banner + blocks + errs;
 }
 
+function renderGeoip(data) {
+  if (!data.hosts.length) {
+    const errs = Object.entries(data.errors || {}).map(([ip,e]) => `<tr><td><code>${escapeHtml(ip)}</code></td><td>${escapeHtml(e)}</td></tr>`).join('');
+    return `<p class="empty">No geolocation data resolved for ${data.ip_count} IP(s).</p>` +
+      (errs ? `<table><thead><tr><th>IP</th><th>Error</th></tr></thead><tbody>${errs}</tbody></table>` : '');
+  }
+
+  const summary = `<div class="meta">${data.ip_count} IP(s) geolocated · source: ${escapeHtml(data.source)}</div>`;
+
+  const blocks = data.hosts.map(h => {
+    const rows = [
+      ['IP',       h.ip ? `<code>${escapeHtml(h.ip)}</code>` : null],
+      ['Hostname', h.hostname ? `<code>${escapeHtml(h.hostname)}</code>` : null],
+      ['City',     h.city],
+      ['Region',   h.region],
+      ['Country',  h.country],
+      ['Postal',   h.postal],
+      ['Timezone', h.timezone],
+      ['ASN',      h.asn],
+      ['Org',      h.org_name],
+    ].filter(([_, v]) => v != null && v !== '');
+    const tableHtml = `<table>${rows.map(([k,v]) => {
+      const val = (typeof v === 'string' && v.startsWith('<code>')) ? v : escapeHtml(String(v));
+      return `<tr><th>${k}</th><td>${val}</td></tr>`;
+    }).join('')}</table>`;
+
+    const coordsHtml = (h.lat != null && h.lng != null)
+      ? `<div class="meta" style="margin-top:8px">Coordinates</div>
+         <div><a href="https://maps.google.com/?q=${h.lat},${h.lng}" target="_blank" rel="noopener noreferrer">
+           <code>${h.lat}, ${h.lng}</code> ↗</a></div>`
+      : '';
+
+    return `<div class="ip-block">
+      <h3><code>${escapeHtml(h.ip)}</code>${h.country ? ` <span class="pill">${escapeHtml(h.country)}</span>` : ''}</h3>
+      ${tableHtml}
+      ${coordsHtml}
+    </div>`;
+  }).join('');
+
+  const errCount = Object.keys(data.errors || {}).length;
+  const errs = errCount
+    ? `<details><summary>Per-IP errors (${errCount})</summary><div class="inner"><table>${
+        Object.entries(data.errors).map(([ip,e]) => `<tr><td><code>${escapeHtml(ip)}</code></td><td>${escapeHtml(e)}</td></tr>`).join('')
+      }</table></div></details>`
+    : '';
+
+  return summary + blocks + errs;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -301,6 +354,7 @@ const MODULES = [
   { id: 'subdomains', endpoint: 'subdomains.php', render: renderSubdomains },
   { id: 'headers',    endpoint: 'headers.php',    render: renderHeaders },
   { id: 'shodan',     endpoint: 'shodan.php',     render: renderShodan },
+  { id: 'geoip',      endpoint: 'geoip.php',      render: renderGeoip },
 ];
 
 async function runModule(domain, mod) {
