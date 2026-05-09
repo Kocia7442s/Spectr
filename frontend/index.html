@@ -111,6 +111,15 @@
     color: var(--accent);
   }
   .pivot-legend { font-size: 11px; color: var(--muted); margin-top: -8px; margin-bottom: 16px; }
+  .header-bar { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+  #export-btn {
+    background: var(--panel-2); color: var(--accent);
+    border: 1px solid var(--border); padding: 8px 16px;
+    border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap;
+    transition: border-color .15s, color .15s;
+  }
+  #export-btn:hover { border-color: var(--accent); }
+  #export-btn:disabled { opacity: .55; cursor: not-allowed; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -124,8 +133,13 @@
 </head>
 <body>
 <header>
-  <h1>Spectr</h1>
-  <p>OSINT · DNS · WHOIS · Subdomains · Headers · Shodan · GeoIP · Email · Username · Phone · Dorks · Gravatar · Pappers</p>
+  <div class="header-bar">
+    <div>
+      <h1>Spectr</h1>
+      <p>OSINT · DNS · WHOIS · Subdomains · Headers · Shodan · GeoIP · Email · Username · Phone · Dorks · Gravatar · Pappers</p>
+    </div>
+    <button id="export-btn" type="button">⬇ Export PDF</button>
+  </div>
 </header>
 <main>
   <section class="section">
@@ -991,6 +1005,158 @@ document.getElementById('pappers-form').addEventListener('submit', (e) => {
   if (!q) return;
   runStandalone('card-pappers', 'pappers.php', 'q=' + encodeURIComponent(q), renderPappers, document.getElementById('pappers-btn'));
 });
+
+function exportPDF() {
+  const sections = [];
+  document.querySelectorAll('.card').forEach(card => {
+    const statusEl  = card.querySelector('[data-status]');
+    if (!statusEl || statusEl.textContent.trim() !== 'ok') return;
+    const titleEl   = card.querySelector('header h2');
+    const contentEl = card.querySelector('[data-content]');
+    if (!titleEl || !contentEl) return;
+    sections.push({ title: titleEl.textContent.trim(), content: contentEl.innerHTML });
+  });
+
+  if (!sections.length) {
+    alert('Aucun résultat à exporter. Lancez d\'abord des scans.');
+    return;
+  }
+
+  const timestamp = new Date().toLocaleString('fr-FR');
+  const inputs = ['domain', 'email-input', 'username-input', 'phone-input', 'pappers-input', 'dorks-input', 'gravatar-input']
+    .map(id => document.getElementById(id)?.value?.trim())
+    .filter(Boolean);
+  const targets = [...new Set(inputs)].join(', ');
+
+  const html = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Spectr — Rapport OSINT</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a1a2e; background: white; }
+  .cover {
+    min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    padding: 60px; background: #0b0f17; color: white; page-break-after: always;
+  }
+  .cover .logo { font-size: 48pt; font-weight: 700; letter-spacing: 2px; color: #6ee7b7; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 14pt; color: #8a96ac; margin-bottom: 40px; }
+  .cover .meta-block { border-left: 3px solid #6ee7b7; padding-left: 20px; margin-bottom: 30px; }
+  .cover .meta-label { font-size: 9pt; color: #8a96ac; text-transform: uppercase; letter-spacing: 1px; }
+  .cover .meta-value { font-size: 13pt; color: white; margin-top: 2px; word-break: break-word; }
+  .cover .disclaimer { margin-top: auto; font-size: 8pt; color: #5d6a82; border-top: 1px solid #243049; padding-top: 20px; width: 100%; }
+  .toc { padding: 40px 60px; page-break-after: always; }
+  .toc h2 { font-size: 18pt; color: #0b0f17; margin-bottom: 20px; border-bottom: 2px solid #6ee7b7; padding-bottom: 8px; }
+  .toc-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dotted #ccc; font-size: 11pt; }
+  .toc-item .toc-num { color: #8a96ac; font-size: 9pt; }
+  .section { padding: 40px 60px; page-break-before: always; }
+  .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #0b0f17; }
+  .section-num { background: #0b0f17; color: #6ee7b7; font-size: 9pt; font-weight: 700; padding: 4px 10px; border-radius: 4px; letter-spacing: 1px; }
+  .section-title { font-size: 16pt; font-weight: 700; color: #0b0f17; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin: 8px 0; }
+  th, td { text-align: left; padding: 5px 8px; border: 1px solid #dde; vertical-align: top; word-break: break-word; }
+  th { background: #f0f4ff; color: #333; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: .3px; }
+  code, pre { font-family: 'Courier New', monospace; font-size: 9pt; background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
+  pre { padding: 8px; display: block; white-space: pre-wrap; word-break: break-word; }
+  .pill { display: inline-block; padding: 1px 6px; border: 1px solid #ccc; border-radius: 999px; font-size: 9pt; margin: 1px 2px; }
+  .pill.good { color: #1a7a4a; border-color: #1a7a4a; }
+  .pill.bad  { color: #c0392b; border-color: #c0392b; }
+  .pill.warn { color: #c0820b; border-color: #c0820b; }
+  .pill.cve  { background: #c0392b; color: white; border-color: #c0392b; font-weight: 600; }
+  .pill.port { color: #2563eb; border-color: #2563eb; }
+  .pill.type-mobile   { color: #1a7a4a; border-color: #1a7a4a; }
+  .pill.type-landline { color: #2563eb; border-color: #2563eb; }
+  .pill.type-special  { color: #c0820b; border-color: #c0820b; }
+  .pill.type-voip     { color: #6d28d9; border-color: #6d28d9; }
+  .pill.type-unknown  { color: #666; }
+  .summary-banner { padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-weight: 600; font-size: 11pt; }
+  .summary-banner.bad  { background: #fde8e8; color: #c0392b; }
+  .summary-banner.good { background: #e8f8f0; color: #1a7a4a; }
+  .summary-banner.warn { background: #fef9e7; color: #c0820b; }
+  .ip-block { border: 1px solid #dde; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fafbff; page-break-inside: avoid; }
+  .ip-block h3 { font-size: 11pt; margin-bottom: 6px; }
+  .meta { color: #666; font-size: 9pt; margin-bottom: 6px; }
+  .dork-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 9pt; gap: 8px; }
+  .dork-row .label { color: #1a1a2e; }
+  .dork-row .q { display: block; font-size: 8pt; color: #666; margin-top: 2px; }
+  .dork-btn { color: #2563eb; text-decoration: none; font-size: 8pt; white-space: nowrap; }
+  details { margin: 6px 0; }
+  details summary { cursor: default; font-size: 9pt; color: #666; }
+  details[open] summary { margin-bottom: 4px; }
+  details .inner { padding: 6px 0 0 12px; }
+  .pivot-tag, .in-card-form, button, form { display: none !important; }
+  .gravatar-img { width: 120px; height: 120px; border-radius: 6px; }
+  .flag-big { font-size: 16pt; }
+  a { color: #2563eb; }
+  a.platform-link { text-decoration: none; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+  .breach-block { border: 1px solid #f5c6c6; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #fff8f8; page-break-inside: avoid; }
+  @media print {
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .section { page-break-before: always; }
+    .ip-block, .breach-block { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="logo">SPECTR</div>
+  <div class="subtitle">Rapport de reconnaissance OSINT</div>
+
+  <div class="meta-block">
+    <div class="meta-label">Cibles analysées</div>
+    <div class="meta-value">${escapeHtml(targets || 'Non spécifié')}</div>
+  </div>
+  <div class="meta-block">
+    <div class="meta-label">Date du rapport</div>
+    <div class="meta-value">${escapeHtml(timestamp)}</div>
+  </div>
+  <div class="meta-block">
+    <div class="meta-label">Modules exécutés</div>
+    <div class="meta-value">${sections.length} module(s)</div>
+  </div>
+
+  <div class="disclaimer">
+    Ce rapport a été généré automatiquement par Spectr. Les données proviennent exclusivement de sources publiques et légalement accessibles (DNS, WHOIS, crt.sh, Shodan, ipinfo.io, HaveIBeenPwned, Gravatar, API gouvernementale française). Ce rapport est destiné à un usage professionnel légitime dans le respect du RGPD et des lois applicables.
+  </div>
+</div>
+
+<div class="toc">
+  <h2>Sommaire</h2>
+  ${sections.map((s, i) => `
+    <div class="toc-item">
+      <span>${escapeHtml(s.title)}</span>
+      <span class="toc-num">Section ${String(i + 1).padStart(2, '0')}</span>
+    </div>`).join('')}
+</div>
+
+${sections.map((s, i) => `
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">${String(i + 1).padStart(2, '0')}</span>
+    <span class="section-title">${escapeHtml(s.title)}</span>
+  </div>
+  <div class="section-content">${s.content}</div>
+</div>`).join('')}
+
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert("Le navigateur a bloqué la fenêtre d'export. Autorisez les pop-ups pour ce site.");
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  // Give the new window time to parse + load any avatar <img>s before opening the print dialog.
+  setTimeout(() => { try { win.focus(); win.print(); } catch (_) {} }, 800);
+}
+
+document.getElementById('export-btn').addEventListener('click', exportPDF);
 
 refreshHistory();
 </script>
