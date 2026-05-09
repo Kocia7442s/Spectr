@@ -78,6 +78,14 @@
     border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 10px;
   }
   .section-title .hint { font-size: 12px; letter-spacing: 0; text-transform: none; color: #5d6a82; font-weight: 400; }
+  .gravatar-img { width: 200px; height: 200px; border-radius: 8px; border: 1px solid var(--border); display: block; margin-bottom: 10px; }
+  .dork-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border-bottom: 1px solid var(--border); align-items: center; }
+  .dork-row:last-child { border-bottom: 0; }
+  .dork-row .label { color: var(--text); font-size: 13px; }
+  .dork-row .q { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .dork-btn { display: inline-block; padding: 4px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--accent-2); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  .dork-btn:hover { border-color: var(--accent-2); }
+  .dork-btn.primary { background: #1f3357; color: #cfe2ff; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .empty { color: var(--muted); font-style: italic; }
   details { border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
@@ -151,6 +159,26 @@
             <button type="submit" id="username-btn">Check username</button>
           </form>
           <div data-content><p class="empty">Enter a username and click Check username.</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-dorks">
+        <header><h2>Google Dorks</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="dorks-form">
+            <input id="dorks-input" type="text" placeholder="name, email, username, anything…" autocomplete="off" required maxlength="120">
+            <button type="submit" id="dorks-btn">Generate dorks</button>
+          </form>
+          <div data-content><p class="empty">Enter a query and click Generate dorks.</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-gravatar">
+        <header><h2>Gravatar</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="gravatar-form">
+            <input id="gravatar-input" type="email" placeholder="user@example.com" autocomplete="off" required>
+            <button type="submit" id="gravatar-btn">Lookup</button>
+          </form>
+          <div data-content><p class="empty">Enter an email and click Lookup.</p></div>
         </div>
       </section>
     </div>
@@ -473,6 +501,104 @@ function renderUsername(data) {
   return summary + found + unknown + errors;
 }
 
+function renderDorks(data) {
+  const top = `
+    <div class="meta" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>${data.total_dorks} dorks generated for <code>${escapeHtml(data.query)}</code></span>
+      <a class="dork-btn primary" href="${escapeHtml(data.search_all_url)}" target="_blank" rel="noopener noreferrer">Search all on Google ↗</a>
+    </div>`;
+
+  const cats = data.categories.map(cat => {
+    const rows = cat.dorks.map(d => `
+      <div class="dork-row">
+        <div>
+          <div class="label">${escapeHtml(d.label)}</div>
+          <code class="q">${escapeHtml(d.q)}</code>
+        </div>
+        <a class="dork-btn" href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>
+      </div>`).join('');
+    return `<details open style="margin-top:10px">
+      <summary><strong>${escapeHtml(cat.category_name)}</strong> <span class="meta">(${cat.dorks.length})</span></summary>
+      <div class="inner" style="padding:0 4px">${rows}</div>
+    </details>`;
+  }).join('');
+
+  return top + cats;
+}
+
+function renderGravatar(data) {
+  if (!data.has_account) {
+    return `<div class="summary-banner warn">No Gravatar account found for this email.</div>
+      <table>
+        <tr><th>Email</th><td><code>${escapeHtml(data.email)}</code></td></tr>
+        <tr><th>MD5 hash</th><td><code>${escapeHtml(data.hash)}</code></td></tr>
+      </table>`;
+  }
+
+  const p = data.profile || {};
+  const banner = `<div class="summary-banner good">✓ Gravatar account found</div>`;
+
+  const avatarHtml = data.has_avatar
+    ? `<img class="gravatar-img" src="${escapeHtml(data.avatar_urls.medium)}" alt="Gravatar avatar" loading="lazy">`
+    : `<div class="meta">Profile exists but no avatar uploaded.</div>`;
+
+  const meta = [
+    ['Display name', p.displayName],
+    ['Username',     p.preferredUsername],
+    ['Profile URL',  p.profileUrl ? `<a href="${escapeHtml(p.profileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.profileUrl)} ↗</a>` : null],
+    ['Location',     p.currentLocation],
+    ['Job title',    p.jobTitle],
+    ['Company',      p.company],
+    ['Pronouns',     p.pronouns],
+    ['About',        p.aboutMe],
+  ].filter(([_, v]) => v != null && v !== '');
+  const metaHtml = meta.length
+    ? `<table>${meta.map(([k,v]) => {
+        const val = (typeof v === 'string' && v.startsWith('<a ')) ? v : escapeHtml(String(v));
+        return `<tr><th>${k}</th><td>${val}</td></tr>`;
+      }).join('')}</table>`
+    : '';
+
+  const accounts = (p.accounts || []).length
+    ? `<div class="meta" style="margin-top:10px">Linked accounts (${p.accounts.length})</div><div class="row">${
+        p.accounts.map(a => {
+          const label = (a.shortname || a.domain || '?') + (a.username ? ' · ' + a.username : '');
+          const cls = a.verified ? 'pill good' : 'pill';
+          return a.url
+            ? `<a class="platform-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"><span class="${cls}">${escapeHtml(label)} ↗</span></a>`
+            : `<span class="${cls}">${escapeHtml(label)}</span>`;
+        }).join('')
+      }</div>`
+    : '';
+
+  const urls = (p.urls || []).length
+    ? `<div class="meta" style="margin-top:10px">URLs</div><div class="row">${
+        p.urls.map(u => u.value
+          ? `<a class="platform-link" href="${escapeHtml(u.value)}" target="_blank" rel="noopener noreferrer"><span class="pill">${escapeHtml(u.title || u.value)} ↗</span></a>`
+          : ''
+        ).join('')
+      }</div>`
+    : '';
+
+  const emails = (p.emails || []).length
+    ? `<div class="meta" style="margin-top:10px">Public emails</div><div class="row">${
+        p.emails.map(e => `<span class="pill">${escapeHtml(e)}</span>`).join('')
+      }</div>`
+    : '';
+
+  const footer = `<details style="margin-top:12px"><summary>Hash + raw URLs</summary>
+    <div class="inner"><table>
+      <tr><th>Email</th><td><code>${escapeHtml(data.email)}</code></td></tr>
+      <tr><th>MD5</th><td><code>${escapeHtml(data.hash)}</code></td></tr>
+      <tr><th>Profile</th><td><code>${escapeHtml(data.profile_url)}</code></td></tr>
+      <tr><th>Avatar 80px</th><td><code>${escapeHtml(data.avatar_urls.small)}</code></td></tr>
+      <tr><th>Avatar 200px</th><td><code>${escapeHtml(data.avatar_urls.medium)}</code></td></tr>
+      <tr><th>Avatar 400px</th><td><code>${escapeHtml(data.avatar_urls.large)}</code></td></tr>
+    </table></div></details>`;
+
+  return banner + avatarHtml + metaHtml + accounts + urls + emails + footer;
+}
+
 function renderHistory(data) {
   if (!data.scans.length) return `<p class="empty">No scans logged yet.</p>`;
   const rows = data.scans.map(s => `
@@ -562,6 +688,20 @@ document.getElementById('username-form').addEventListener('submit', (e) => {
   const username = document.getElementById('username-input').value.trim();
   if (!username) return;
   runStandalone('card-username', 'username.php', 'username=' + encodeURIComponent(username), renderUsername, document.getElementById('username-btn'));
+});
+
+document.getElementById('dorks-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = document.getElementById('dorks-input').value.trim();
+  if (!q) return;
+  runStandalone('card-dorks', 'dorks.php', 'query=' + encodeURIComponent(q), renderDorks, document.getElementById('dorks-btn'));
+});
+
+document.getElementById('gravatar-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('gravatar-input').value.trim();
+  if (!email) return;
+  runStandalone('card-gravatar', 'gravatar.php', 'email=' + encodeURIComponent(email), renderGravatar, document.getElementById('gravatar-btn'));
 });
 
 refreshHistory();
