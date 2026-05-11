@@ -347,6 +347,30 @@
           <div data-content><p class="empty">Profile + repos + commit emails + orgs.</p></div>
         </div>
       </section>
+      <section class="card" id="card-emailrep">
+        <header><h2>EmailRep (réputation)</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form class="in-card-form" id="emailrep-form">
+            <input id="emailrep-input" type="email" placeholder="user@example.com" autocomplete="off" required>
+            <button type="submit" id="emailrep-btn">Lookup</button>
+          </form>
+          <div data-content><p class="empty">Réputation, fuites, plateformes liées (clé recommandée).</p></div>
+        </div>
+      </section>
+      <section class="card" id="card-userperm">
+        <header><h2>Username Permutator</h2><span class="badge loading" data-status>idle</span></header>
+        <div class="body">
+          <form id="userperm-form" class="exif-inputs">
+            <div class="row-input">
+              <input id="userperm-first" type="text" placeholder="prénom" autocomplete="off" required style="flex:1;padding:6px 8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">
+              <input id="userperm-last"  type="text" placeholder="nom"    autocomplete="off" required style="flex:1;padding:6px 8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">
+              <input id="userperm-year"  type="text" placeholder="année (opt)" autocomplete="off" maxlength="4" pattern="\d{4}" style="width:90px;padding:6px 8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">
+              <button type="submit" id="userperm-btn">Générer</button>
+            </div>
+          </form>
+          <div data-content><p class="empty">Génère ~20 variantes ordonnées par probabilité. Clic = pivote vers Username Checker.</p></div>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -1230,6 +1254,107 @@ function renderGithub(data) {
   return profileBlock + metaHtml + stats + langHtml + orgsHtml + emailsHtml + reposHtml + pivots;
 }
 
+function renderEmailrep(data) {
+  const repColors = { high: 'good', medium: 'warn', low: 'bad', none: 'bad' };
+  const repPill = data.reputation
+    ? `<span class="pill ${repColors[data.reputation] || ''}">réputation: ${escapeHtml(data.reputation)}</span>`
+    : '';
+
+  let banner;
+  if (data.suspicious || data.flags.malicious_activity || data.flags.malicious_recent) {
+    banner = `<div class="summary-banner bad">⚠ Email signalé suspicious / malicious activity</div>`;
+  } else if (data.flags.data_breach || data.flags.credentials_leaked) {
+    banner = `<div class="summary-banner warn">⚠ Présent dans des fuites de données</div>`;
+  } else {
+    banner = `<div class="summary-banner good">✓ Aucun flag majeur</div>`;
+  }
+
+  const summary = `<div class="meta">${repPill} <span class="pill">${data.references ?? 0} références</span> ${data.flags.disposable ? '<span class="pill bad">disposable</span>' : ''} ${data.flags.free_provider ? '<span class="pill">free provider</span>' : ''}</div>`;
+
+  // Flag matrix as colored pills.
+  const flagDef = [
+    ['data_breach',        'Data breach',         'bad'],
+    ['credentials_leaked', 'Credentials leaked',  'bad'],
+    ['malicious_activity', 'Malicious activity',  'bad'],
+    ['blacklisted',        'Blacklisted',         'bad'],
+    ['spam',               'Spam',                'bad'],
+    ['spoofable',          'Spoofable',           'warn'],
+    ['disposable',         'Disposable',          'warn'],
+    ['accept_all',         'Accept-all MX',       'warn'],
+    ['deliverable',        'Deliverable',         'good'],
+    ['valid_mx',           'Valid MX',            'good'],
+    ['spf_strict',         'SPF strict',          'good'],
+    ['dmarc_enforced',     'DMARC enforced',      'good'],
+  ];
+  const flagPills = flagDef.map(([k, label, dangerCls]) => {
+    const v = data.flags[k];
+    if (v === null || v === undefined) return '';
+    if (v === true)  return `<span class="pill ${dangerCls}">${escapeHtml(label)}</span>`;
+    if (v === false) return `<span class="pill" style="opacity:.45">${escapeHtml(label)}: no</span>`;
+    return '';
+  }).filter(Boolean).join('');
+  const flagsHtml = `<div class="meta" style="margin-top:8px">Flags</div><div class="row">${flagPills}</div>`;
+
+  const tl = data.timeline || {};
+  const tlHtml = (tl.first_seen || tl.last_seen)
+    ? `<div class="meta" style="margin-top:8px">Timeline</div><table>
+        ${tl.first_seen ? `<tr><th>First seen</th><td><code>${escapeHtml(tl.first_seen)}</code></td></tr>` : ''}
+        ${tl.last_seen  ? `<tr><th>Last seen</th><td><code>${escapeHtml(tl.last_seen)}</code></td></tr>`  : ''}
+      </table>`
+    : '';
+
+  const ds = data.domain_stats || {};
+  const dsRows = [
+    ['Domain reputation',    ds.domain_reputation],
+    ['Domain age (days)',    ds.days_since_domain_creation],
+    ['New domain',           ds.new_domain === true ? '<span class="pill warn">yes</span>' : (ds.new_domain === false ? 'no' : null)],
+    ['Suspicious TLD',       ds.suspicious_tld === true ? '<span class="pill bad">yes</span>' : (ds.suspicious_tld === false ? 'no' : null)],
+    ['Primary MX',           ds.primary_mx ? `<code>${escapeHtml(ds.primary_mx)}</code>` : null],
+  ].filter(([_, v]) => v != null && v !== '');
+  const dsHtml = dsRows.length
+    ? `<div class="meta" style="margin-top:8px">Domain stats</div><table>${dsRows.map(([k, v]) => {
+        const val = (typeof v === 'string' && (v.startsWith('<code>') || v.startsWith('<span'))) ? v : escapeHtml(String(v));
+        return `<tr><th>${k}</th><td>${val}</td></tr>`;
+      }).join('')}</table>`
+    : '';
+
+  const profilesHtml = (data.profiles || []).length
+    ? `<div class="meta" style="margin-top:8px">Plateformes liées (${data.profiles.length}) — selon EmailRep</div><div class="row">${
+        data.profiles.map(p => `<span class="pill good">${escapeHtml(p)}</span>`).join('')
+      }</div>`
+    : '';
+
+  const local = (data.email || '').split('@')[0];
+  const pivots = `<div class="meta" style="margin-top:10px">Pivot</div><div class="row">${
+    pivotBtn('email',    data.email,                 data.email) +
+    (data.domain ? pivotBtn('domain', data.domain, 'Scan domain: ' + data.domain) : '') +
+    (local       ? pivotBtn('username', local,     'Username: ' + local)         : '') +
+    pivotBtn('query',    data.email,                 '🔍 Dorks: ' + data.email)
+  }</div>`;
+
+  return banner + summary + flagsHtml + tlHtml + dsHtml + profilesHtml + pivots;
+}
+
+function renderUserperm(data) {
+  if (!data.count) {
+    return `<div class="summary-banner warn">Aucune variante générée — vérifie le prénom et le nom.</div>`;
+  }
+  const head = `<div class="meta">${data.count} variantes pour <code>${escapeHtml(data.first)} ${escapeHtml(data.last)}</code>${data.year ? ' · année ' + data.year : ''} — triées par vraisemblance</div>`;
+
+  const rows = data.variants.map(v => {
+    const scoreCls = v.score >= 80 ? 'good' : (v.score >= 50 ? '' : 'warn');
+    return `<tr>
+      <td><span class="pill ${scoreCls}">${v.score}</span></td>
+      <td><code>${escapeHtml(v.variant)}</code></td>
+      <td><span class="meta">${escapeHtml(v.pattern)}</span></td>
+      <td>${pivotBtn('username', v.variant, 'Check')} ${pivotBtn('query', v.variant, '🔍')}</td>
+    </tr>`;
+  }).join('');
+  const tableHtml = `<table style="margin-top:8px"><thead><tr><th>Score</th><th>Variante</th><th>Pattern</th><th>Pivot</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  return head + tableHtml;
+}
+
 function renderMailsec(data) {
   const score = data.score;
   const cls = score >= 80 ? 'score-excellent'
@@ -1713,6 +1838,27 @@ function graphAddFromScan(moduleId, data, primary) {
       // Dorks are pure search URLs, not facts — skip.
       return;
     }
+    case 'emailrep': {
+      const e = data.email; if (!e) break;
+      const en = graphAddNode('email', e, e, {
+        reputation: data.reputation,
+        suspicious: data.suspicious,
+        breach:     data.flags?.data_breach,
+      });
+      if (data.domain) {
+        graphAddNode('domain', data.domain);
+        graphAddEdge(en.key, graphNodeKey('domain', data.domain), 'mx');
+      }
+      for (const p of (data.profiles || [])) {
+        graphAddNode('server', p);
+        graphAddEdge(en.key, graphNodeKey('server', p), 'emailrep');
+      }
+      break;
+    }
+    case 'userperm': {
+      // Variants are hypotheses, not facts — skip until the user pivots and confirms.
+      return;
+    }
   }
   graphRender();
 }
@@ -1870,6 +2016,23 @@ document.getElementById('mailsec-form').addEventListener('submit', (e) => {
   const d = document.getElementById('mailsec-input').value.trim();
   if (!d) return;
   runStandalone('card-mailsec', 'mailsec.php', 'domain=' + encodeURIComponent(d), renderMailsec, document.getElementById('mailsec-btn'), d);
+});
+
+document.getElementById('emailrep-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('emailrep-input').value.trim();
+  if (!email) return;
+  runStandalone('card-emailrep', 'emailrep.php', 'email=' + encodeURIComponent(email), renderEmailrep, document.getElementById('emailrep-btn'), email);
+});
+
+document.getElementById('userperm-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const first = document.getElementById('userperm-first').value.trim();
+  const last  = document.getElementById('userperm-last').value.trim();
+  const year  = document.getElementById('userperm-year').value.trim();
+  if (!first || !last) return;
+  const params = 'first=' + encodeURIComponent(first) + '&last=' + encodeURIComponent(last) + (year ? '&year=' + encodeURIComponent(year) : '');
+  runStandalone('card-userperm', 'userperm.php', params, renderUserperm, document.getElementById('userperm-btn'), first + ' ' + last);
 });
 
 function exportPDF() {

@@ -22,4 +22,7 @@ return [
     // numverify API key — register at https://numverify.com (free tier: 100 req/month).
     // Without a key, /api/phone.php returns local parsing only.
     'numverify_api_key' => getenv('SPECTR_NUMVERIFY_KEY') ?: '',
+    // EmailRep.io key — register at https://emailrep.io for higher rate limits.
+    // Without a key, /api/emailrep.php hits very tight throttling on most IPs.
+    'emailrep_api_key'  => getenv('SPECTR_EMAILREP_KEY') ?: '',
 ];
